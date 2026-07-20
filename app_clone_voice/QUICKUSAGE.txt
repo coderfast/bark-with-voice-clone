@@ -1,0 +1,217 @@
+QUICKUSAGE.txt — app_clone_voice
+================================
+
+Guia rapida para clonar voces.
+
+
+1. AUDIO DE ENTRADA
+====================
+
+Formatos soportados:
+  .wav   (recomendado)
+  .mp3
+  .ogg
+  .flac  (recomendado)
+  .m4a
+  .wma
+
+Duracion:
+  Minima:  5 segundos (recomendado)
+  Maxima:  13 segundos (limite absoluto)
+
+Sample rate:
+  Minimo:  8,000 Hz
+  Recomendado: 16,000 Hz o mayor
+  Optimo:  44,100 Hz o 48,000 Hz
+
+
+2. CALIDAD DEL AUDIO
+====================
+
+Lo que SIRVE bien:
+  - Audio claro, sin ruido de fondo
+  - Una sola persona hablando
+  - Voz natural, sin efectos
+  - Silencio al inicio y al final
+
+Lo que NO sirve bien:
+  - Musica de fondo o ruido ambiental
+  - Multiples personas hablando
+  - Audio comprimido a baja bitrate
+  - Voces artificiales o sintetizadas
+  - Audio con clipping (distorsion)
+
+
+3. RECOMENDACIONES PARA GRABAR
+================================
+
+Entorno:
+  - Habitacion silenciosa, sin eco
+  - Micfono a 15-30 cm de la boca
+  - Sin aire acondicionado o ventiladores
+
+Configuracion del micfono:
+  - Sample rate: 44,100 Hz o 48,000 Hz
+  - Bit depth: 16 bits o 24 bits
+  - Formato: WAV o FLAC (sin compresion)
+
+Contenido del audio:
+  - Leer un texto claro y continuo
+  - Hablar con tono natural y constante
+  - Evitar pausas largas o muletillas
+
+Ejemplo de texto para grabar:
+  "El cielo esta azul hoy, el sol brilla con fuerza y
+  las hojas de los arboles se mueven con la brisa.
+  Es un dia perfecto para caminar por el parque."
+
+
+4. INSTALACION
+===============
+
+Windows:
+  cd app_clone_voice
+  pip install -r requirements.txt
+
+Linux / macOS:
+  cd app_clone_voice
+  pip3 install -r requirements.txt
+
+
+5. USO RAPIDO
+=============
+
+Paso 1: Colocar audio de referencia
+  Copiar tu archivo de audio (ej. mi_voz.wav) en:
+    app_clone_voice/source_voice_input/
+
+Paso 2: Clonar la voz
+
+  Windows:
+    python voice_clone.py --name mi_voz
+
+  Linux / macOS:
+    python3 voice_clone.py --name mi_voz
+
+  O especificando el archivo directamente:
+
+  Windows:
+    python voice_clone.py --audio mi_voz.wav --name mi_voz
+
+  Linux / macOS:
+    python3 voice_clone.py --audio mi_voz.wav --name mi_voz
+
+Paso 3: Usar el prompt generado
+  El archivo se guarda en:
+    app_clone_voice/bark/assets/prompts/mi_voz.npz
+
+
+6. EJEMPLOS POR PLATAFORMA
+============================
+
+--- Windows ---
+
+  cd app_clone_voice
+  python voice_clone.py --name carlos
+  python voice_clone.py --audio voz.wav --name carlos
+  python voice_clone.py --list
+  python voice_clone.py --info carlos
+  python voice_clone.py --device-info
+  python voice_clone.py --verbose --audio ref.wav --name mi_voz
+  python voice_clone.py --force --audio ref.wav --name mi_voz
+
+--- Linux ---
+
+  cd app_clone_voice
+  python3 voice_clone.py --name carlos
+  python3 voice_clone.py --audio voz.wav --name carlos
+  python3 voice_clone.py --list
+  python3 voice_clone.py --info carlos
+  python3 voice_clone.py --device-info
+  python3 voice_clone.py --verbose --audio ref.wav --name mi_voz
+  python3 voice_clone.py --force --audio ref.wav --name mi_voz
+
+--- macOS ---
+
+  cd app_clone_voice
+  python3 voice_clone.py --name carlos
+  python3 voice_clone.py --audio voz.wav --name carlos
+  python3 voice_clone.py --list
+  python3 voice_clone.py --info carlos
+  python3 voice_clone.py --device-info
+  python3 voice_clone.py --device mps --audio ref.wav --name mi_voz
+  python3 voice_clone.py --verbose --audio ref.wav --name mi_voz
+  python3 voice_clone.py --force --audio ref.wav --name mi_voz
+
+
+7. DISPOSITIVO POR PLATAFORMA
+===============================
+
+  Windows (GPU NVIDIA):
+    python voice_clone.py --device cuda --audio ref.wav --name mi_voz
+
+  Linux (GPU NVIDIA):
+    python3 voice_clone.py --device cuda --audio ref.wav --name mi_voz
+
+  macOS (Apple Silicon M1/M2/M3/M4):
+    python3 voice_clone.py --device mps --audio ref.wav --name mi_voz
+
+  Cualquier plataforma (auto-detectar):
+    Windows:  python voice_clone.py --device auto --audio ref.wav --name mi_voz
+    Linux:    python3 voice_clone.py --device auto --audio ref.wav --name mi_voz
+    macOS:    python3 voice_clone.py --device auto --audio ref.wav --name mi_voz
+
+
+8. COMANDOS UTILES
+==================
+
+  Windows:
+    python voice_clone.py --list
+    python voice_clone.py --info carlos
+    python voice_clone.py --device-info
+    python voice_clone.py --version
+
+  Linux / macOS:
+    python3 voice_clone.py --list
+    python3 voice_clone.py --info carlos
+    python3 voice_clone.py --device-info
+    python3 voice_clone.py --version
+
+
+9. SOLUCION DE PROBLEMAS
+========================
+
+  "Audio too long"
+    Tu audio dura mas de 13 segundos. Recortalo.
+
+  "Invalid voice name"
+    Usa solo letras, numeros, guiones (-) y guiones bajos (_).
+
+  "Voice already exists"
+    Usa --force para sobrescribir, o elige otro nombre.
+
+  "CUDA out of memory"
+    Usa --device cpu o cierra otros programas que usen GPU.
+
+  "No module named 'torch'"
+    Instala las dependencias:
+      Windows:  pip install -r requirements.txt
+      Linux:    pip3 install -r requirements.txt
+      macOS:    pip3 install -r requirements.txt
+
+
+10. COMPILAR COMO EJECUTABLE PORTABLE
+======================================
+
+  Windows:
+    pip install -r requirements-build.txt
+    python build.py
+
+  Linux / macOS:
+    pip3 install -r requirements-build.txt
+    python3 build.py
+
+  El ejecutable se genera en: dist/voice_clone.exe (Windows) o dist/voice_clone (Linux/Mac)
+
+  Para ejecutar sin Python:
+    ./dist/voice_clone --name mi_voz --audio ref.wav

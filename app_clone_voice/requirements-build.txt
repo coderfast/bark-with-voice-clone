@@ -1,0 +1,2 @@
+# Build dependencies for compiling voice_clone as executable
+pyinstaller>=6.0
