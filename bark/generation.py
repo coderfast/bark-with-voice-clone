@@ -422,7 +422,7 @@ def load_model(use_gpu=True, use_small=False, force_reload=False, model_type="te
         models_devices[model_key] = device
         device = "cpu"
     if model_key not in models or force_reload:
-        if path.endswith(".ckpt") or path.endswith(".pt") or path.endswith(".bin"):
+        if path is not None and (path.endswith(".ckpt") or path.endswith(".pt") or path.endswith(".bin")):
             ckpt_path = path
         else:
             ckpt_path = _get_ckpt_path(model_type, use_small=use_small, path=path)
