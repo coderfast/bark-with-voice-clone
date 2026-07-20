@@ -68,9 +68,12 @@ To further reduce the chances of unintended use, a simple classifier to detect B
 ## Usage Notes
 
 - Voice cloning works best with clear, noise-free audio samples of 5-12 seconds
-- Generated audio is 24kHz, mono channel
-- RVC (Retrieval-based Voice Conversion) can be optionally applied as post-processing for pitch/timbre adjustment
-- Fine-tuned models should be placed in `semantic_output/`, `coarse_output/`, and `fine_output/` directories
+- Generated audio is 24kHz by default, can be resampled to 11025, 22050, or 44100 Hz
+- Supports 8-bit, 16-bit, or float32 audio output
+- Supports mono or stereo output
+- RVC (Retrieval-based Voice Conversion) can be optionally applied as post-processing
+- Fine-tuned models are automatically loaded from `semantic_output/`, `coarse_output/`, and `fine_output/` directories
+- CLI available: `python bark_cli.py generate "text" -o output.wav`
 
 ## License
 

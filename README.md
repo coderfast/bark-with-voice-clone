@@ -6,22 +6,32 @@ A fork of [Suno's BARK](https://github.com/suno-ai/bark) text-to-speech model wi
 
 - **Voice Cloning**: Clone any voice from 5-12 second audio samples using HuBERT
 - **Text-to-Speech**: Generate natural-sounding speech in multiple languages
+- **CLI Interface**: Generate audio directly from command line
+- **Custom Audio Format**: Output at 11025, 22050, or 44100 Hz with 8 or 16 bits
 - **Fine-tuning**: Fine-tune semantic, coarse, and fine models with LoRA and quantization
 - **RVC Integration**: Optional Retrieval-based Voice Conversion post-processing
 - **Multi-language**: Supports English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, and Chinese
 
 ## Installation
 
-```bash
+### Windows
+
+```cmd
 git clone https://github.com/your-username/bark-with-voice-clone
 cd bark-with-voice-clone
+python -m venv venv
+venv\Scripts\activate
 pip install .
 ```
 
-### Optional: RVC for Voice Conversion
+### Linux / Mac
 
 ```bash
-git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI
+git clone https://github.com/your-username/bark-with-voice-clone
+cd bark-with-voice-clone
+python3 -m venv venv
+source venv/bin/activate
+pip install .
 ```
 
 Eduardo remember the next:
@@ -31,7 +41,26 @@ and put in a folder named RVC-GUI-pkg
 
 ## Quick Start
 
-### Basic Text-to-Speech
+### Using CLI (Recommended)
+
+```bash
+# Generate basic audio
+python bark_cli.py generate "Hello world" -o output.wav
+
+# Generate with specific voice
+python bark_cli.py generate "Hola mundo" -v es_speaker_0 -o hola.wav
+
+# Generate with custom audio settings
+python bark_cli.py generate "Hello" -v en_speaker_0 -o output.wav --sample-rate 44100 --bits 16 --channels mono
+
+# List available voices
+python bark_cli.py voices
+
+# Clone a voice
+python bark_cli.py clone --audio reference.wav --name my_voice
+```
+
+### Using Python API
 
 ```python
 from bark import SAMPLE_RATE, generate_audio, preload_models
@@ -44,68 +73,53 @@ write("output.wav", SAMPLE_RATE, audio)
 
 ### Voice Cloning
 
-1. Clone a voice from an audio sample:
-
 ```python
-from bark.generation import load_codec_model, generate_text_semantic
-from encodec.utils import convert_audio
-import torchaudio
-import torch
+from bark import generate_audio, preload_models
+from bark.api import save_audio
 
-device = 'cuda'
-model = load_codec_model(use_gpu=True)
+preload_models()
 
-# Load HuBERT for voice cloning
-from hubert.hubert_manager import HuBERTManager
-from hubert.pre_kmeans_hubert import CustomHubert
-from hubert.customtokenizer import CustomTokenizer
-
-hubert_manager = HuBERTManager()
-hubert_manager.make_sure_hubert_installed()
-hubert_manager.make_sure_tokenizer_installed()
-
-hubert_model = CustomHubert(checkpoint_path='data/models/hubert/hubert.pt').to(device)
-tokenizer = CustomTokenizer.load_from_checkpoint('data/models/hubert/tokenizer.pth').to(device)
-
-# Load and process reference audio
-wav, sr = torchaudio.load('reference.wav')
-wav = convert_audio(wav, sr, model.sample_rate, model.channels)
-wav = wav.to(device)
-
-# Extract semantic tokens
-semantic_vectors = hubert_model.forward(wav, input_sample_hz=model.sample_rate)
-semantic_tokens = tokenizer.get_token(semantic_vectors)
-
-# Extract audio codes
-with torch.no_grad():
-    encoded_frames = model.encode(wav.unsqueeze(0))
-codes = torch.cat([encoded[0] for encoded in encoded_frames], dim=-1).squeeze()
-
-# Save as voice prompt
-import numpy as np
-np.savez('bark/assets/prompts/my_voice.npz', 
-         fine_prompt=codes.cpu().numpy(), 
-         coarse_prompt=codes[:2, :].cpu().numpy(), 
-         semantic_prompt=semantic_tokens.cpu().numpy())
-```
-
-2. Generate speech with cloned voice:
-
-```python
-audio = generate_audio("Hello world!", history_prompt="my_voice")
-write("output.wav", SAMPLE_RATE, audio)
-```
-
-### Using Fine-tuned Models
-
-```python
-preload_models(
-    text_model_path="semantic_output/pytorch_model.bin",
-    coarse_model_path="coarse_output/pytorch_model.bin",
-    fine_model_path="fine_output/pytorch_model.bin",
+# Generate with cloned voice and custom format
+audio = generate_audio(
+    "Hello world!",
+    history_prompt="my_voice",
+    sample_rate=44100,
+    bits_per_sample=16,
+    channels="mono"
 )
 
-audio = generate_audio("Hello!", history_prompt="my_voice")
+save_audio("output.wav", audio, sample_rate=44100)
+```
+
+## CLI Reference
+
+### Generate Command
+
+```bash
+python bark_cli.py generate "text" [options]
+```
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `-o, --output` | Output file path (.wav) | Required |
+| `-v, --voice` | Voice prompt name | None |
+| `--sample-rate` | 11025, 22050, 44100 Hz | 24000 |
+| `--bits` | 8 or 16 bits | float32 |
+| `--channels` | mono or stereo | mono |
+| `--text-temp` | Text temperature | 0.7 |
+| `--waveform-temp` | Waveform temperature | 0.7 |
+| `--small` | Use small models (faster) | False |
+
+### Clone Command
+
+```bash
+python bark_cli.py clone --audio reference.wav --name my_voice
+```
+
+### Voices Command
+
+```bash
+python bark_cli.py voices
 ```
 
 ## Jupyter Notebooks
@@ -124,34 +138,20 @@ audio = generate_audio("Hello!", history_prompt="my_voice")
 
 ## Fine-tuning
 
-The project supports fine-tuning all three model stages using LoRA and optional quantization:
-
 ### 1. Dataset Preparation
 
 Create a dataset with:
 - `train.txt` and `valid.txt` containing `path|text` lines
 - Audio files in `.wav` format
-- Run `train_semantic.ipynb` to extract tokens (creates `tokens/` subdirectory)
+- Run `train_semantic.ipynb` to extract tokens
 
 ### 2. Training
 
 ```bash
-# Fine-tune semantic model
 jupyter notebook train_semantic.ipynb
-
-# Fine-tune coarse model
 jupyter notebook train_coarse.ipynb
-
-# Fine-tune fine model
 jupyter notebook train_fine.ipynb
 ```
-
-Training features:
-- LoRA adapters (configurable dimension, scaling, dropout)
-- Mixed precision (bf16)
-- Gradient accumulation
-- Checkpoint resumption
-- W&B logging (optional)
 
 ### 3. Output
 
@@ -162,28 +162,17 @@ Fine-tuned models are saved to:
 
 ## RVC Integration
 
-Optional RVC post-processing for voice conversion:
+```bash
+# RVC is automatically downloaded when needed
+# Or manually clone:
+git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI
+```
 
 ```python
 from rvc_infer import get_vc, vc_single
 
-# Load RVC model
 get_vc("path/to/model.pth", "cuda:0", True)
-
-# Convert audio
-audio = vc_single(
-    sid=0,
-    input_audio="input.wav",
-    f0_up_key=-6,
-    f0_file=None,
-    f0_method="harvest",
-    file_index="path/to/index",
-    index_rate=0.75,
-    filter_radius=3,
-    resample_sr=24000,
-    rms_mix_rate=0.25,
-    protect=0.33
-)
+audio = vc_single(0, "input.wav", f0_up_key=-6, ...)
 ```
 
 ## Model Architecture
@@ -194,13 +183,7 @@ audio = vc_single(
 | GPT (coarse) | 80M | Causal | 2×1,024 | Semantic → Coarse codes |
 | FineGPT | 80M | Non-causal | 6×1,024 | Coarse → Fine codes |
 
-- **EnCodec**: Neural audio codec (24kHz, 8 codebooks)
-- **HuBERT**: Self-supervised speech representation (modified, no kmeans)
-- **BERT tokenizer**: `bert-base-multilingual-cased`
-
 ## Non-speech Sounds
-
-Bark can generate various non-speech sounds:
 
 - `[laughter]` or `[laughs]`
 - `[sighs]`
@@ -238,18 +221,17 @@ Bark can generate various non-speech sounds:
 - **VRAM**: 4GB+ for small models, 8GB+ for full models
 - **RAM**: 8GB+ recommended
 
-On modern GPUs with PyTorch nightly, Bark can generate audio in roughly realtime. On older GPUs or CPU, inference may be 10-100x slower.
-
 ## Project Structure
 
 ```
 bark-with-voice-clone/
 ├── bark/                    # Core BARK TTS module
 ├── hubert/                  # HuBERT voice cloning module
-├── utils/                   # LoRA and quantization utilities
+├── utils/                   # Utilities (LoRA, training, RVC manager)
+├── bark_cli.py              # Command Line Interface
 ├── notebooks/               # Additional notebooks
 ├── datasets/                # Training datasets
-├── data/models/hubert/      # HuBERT models (downloaded on first run)
+├── data/models/hubert/      # HuBERT models
 ├── models/                  # Bark model weights
 ├── semantic_output/         # Fine-tuned semantic model
 ├── coarse_output/           # Fine-tuned coarse model
