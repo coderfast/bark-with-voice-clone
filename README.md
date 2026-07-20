@@ -1,16 +1,264 @@
-# 🐶 BARK AI: but with the ability to use voice cloning on custom audio samples
+# Bark with Voice Clone
 
-For RVC `git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI` and train your model or point the code to you model (must clone RVC repo in bark-with-voice-clone directory)
+A fork of [Suno's BARK](https://github.com/suno-ai/bark) text-to-speech model with added voice cloning capabilities using HuBERT semantic token quantization. Clone voices from short audio samples, generate speech in that cloned voice, fine-tune models on custom datasets, and optionally apply RVC post-processing.
 
-If you want to clone a voice just follow the `clone_voice.ipynb` notebook. If you want to generate audio from text, follow the `generate.ipynb` notebook.
+## Features
 
-To create a voice clone sample, you need an audio sample of around 5-12 seconds
+- **Voice Cloning**: Clone any voice from 5-12 second audio samples using HuBERT
+- **Text-to-Speech**: Generate natural-sounding speech in multiple languages
+- **Fine-tuning**: Fine-tune semantic, coarse, and fine models with LoRA and quantization
+- **RVC Integration**: Optional Retrieval-based Voice Conversion post-processing
+- **Multi-language**: Supports English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, and Chinese
 
-You will get the best results by making generations with your cloned voice until you find one that is really close to the source. Then use that as the new history prompt (comes from the model so should theoretically be more consistent)
+## Installation
 
-- [BARK text to speech @ SERP AI](https://serp.ai/tools/bark-text-to-speech-ai-voice-clone-app/)
+```bash
+git clone https://github.com/your-username/bark-with-voice-clone
+cd bark-with-voice-clone
+pip install .
+```
 
-# Contributors
+### Optional: RVC for Voice Conversion
+
+```bash
+git clone https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI
+```
+
+Eduardo remember the next:
+https://github.com/Tiger14n/RVC-GUI/blob/main/README.md
+https://github.com/Tiger14n/RVC-GUI/releases/tag/Windows-pkg
+and put in a folder named RVC-GUI-pkg
+
+## Quick Start
+
+### Basic Text-to-Speech
+
+```python
+from bark import SAMPLE_RATE, generate_audio, preload_models
+from scipy.io.wavfile import write
+
+preload_models()
+audio = generate_audio("Hello, my name is Serpy. And, uh — and I like pizza. [laughs]")
+write("output.wav", SAMPLE_RATE, audio)
+```
+
+### Voice Cloning
+
+1. Clone a voice from an audio sample:
+
+```python
+from bark.generation import load_codec_model, generate_text_semantic
+from encodec.utils import convert_audio
+import torchaudio
+import torch
+
+device = 'cuda'
+model = load_codec_model(use_gpu=True)
+
+# Load HuBERT for voice cloning
+from hubert.hubert_manager import HuBERTManager
+from hubert.pre_kmeans_hubert import CustomHubert
+from hubert.customtokenizer import CustomTokenizer
+
+hubert_manager = HuBERTManager()
+hubert_manager.make_sure_hubert_installed()
+hubert_manager.make_sure_tokenizer_installed()
+
+hubert_model = CustomHubert(checkpoint_path='data/models/hubert/hubert.pt').to(device)
+tokenizer = CustomTokenizer.load_from_checkpoint('data/models/hubert/tokenizer.pth').to(device)
+
+# Load and process reference audio
+wav, sr = torchaudio.load('reference.wav')
+wav = convert_audio(wav, sr, model.sample_rate, model.channels)
+wav = wav.to(device)
+
+# Extract semantic tokens
+semantic_vectors = hubert_model.forward(wav, input_sample_hz=model.sample_rate)
+semantic_tokens = tokenizer.get_token(semantic_vectors)
+
+# Extract audio codes
+with torch.no_grad():
+    encoded_frames = model.encode(wav.unsqueeze(0))
+codes = torch.cat([encoded[0] for encoded in encoded_frames], dim=-1).squeeze()
+
+# Save as voice prompt
+import numpy as np
+np.savez('bark/assets/prompts/my_voice.npz', 
+         fine_prompt=codes.cpu().numpy(), 
+         coarse_prompt=codes[:2, :].cpu().numpy(), 
+         semantic_prompt=semantic_tokens.cpu().numpy())
+```
+
+2. Generate speech with cloned voice:
+
+```python
+audio = generate_audio("Hello world!", history_prompt="my_voice")
+write("output.wav", SAMPLE_RATE, audio)
+```
+
+### Using Fine-tuned Models
+
+```python
+preload_models(
+    text_model_path="semantic_output/pytorch_model.bin",
+    coarse_model_path="coarse_output/pytorch_model.bin",
+    fine_model_path="fine_output/pytorch_model.bin",
+)
+
+audio = generate_audio("Hello!", history_prompt="my_voice")
+```
+
+## Jupyter Notebooks
+
+| Notebook | Description |
+|----------|-------------|
+| `clone_voice.ipynb` | Voice cloning + generation workflow |
+| `generate.ipynb` | Audio generation with RVC support |
+| `generate_chunked.ipynb` | Long text generation with chunking and RVC |
+| `train_semantic.ipynb` | Fine-tune text-to-semantic model |
+| `train_coarse.ipynb` | Fine-tune semantic-to-coarse model |
+| `train_fine.ipynb` | Fine-tune coarse-to-fine model |
+| `test_models.ipynb` | Test fine-tuned models with RVC |
+| `rvc_test.ipynb` | RVC inference testing |
+| `notebooks/fake_classifier.ipynb` | Audio deepfake detection classifier |
+
+## Fine-tuning
+
+The project supports fine-tuning all three model stages using LoRA and optional quantization:
+
+### 1. Dataset Preparation
+
+Create a dataset with:
+- `train.txt` and `valid.txt` containing `path|text` lines
+- Audio files in `.wav` format
+- Run `train_semantic.ipynb` to extract tokens (creates `tokens/` subdirectory)
+
+### 2. Training
+
+```bash
+# Fine-tune semantic model
+jupyter notebook train_semantic.ipynb
+
+# Fine-tune coarse model
+jupyter notebook train_coarse.ipynb
+
+# Fine-tune fine model
+jupyter notebook train_fine.ipynb
+```
+
+Training features:
+- LoRA adapters (configurable dimension, scaling, dropout)
+- Mixed precision (bf16)
+- Gradient accumulation
+- Checkpoint resumption
+- W&B logging (optional)
+
+### 3. Output
+
+Fine-tuned models are saved to:
+- `semantic_output/pytorch_model.bin`
+- `coarse_output/pytorch_model.bin`
+- `fine_output/pytorch_model.bin`
+
+## RVC Integration
+
+Optional RVC post-processing for voice conversion:
+
+```python
+from rvc_infer import get_vc, vc_single
+
+# Load RVC model
+get_vc("path/to/model.pth", "cuda:0", True)
+
+# Convert audio
+audio = vc_single(
+    sid=0,
+    input_audio="input.wav",
+    f0_up_key=-6,
+    f0_file=None,
+    f0_method="harvest",
+    file_index="path/to/index",
+    index_rate=0.75,
+    filter_radius=3,
+    resample_sr=24000,
+    rms_mix_rate=0.25,
+    protect=0.33
+)
+```
+
+## Model Architecture
+
+| Model | Parameters | Attention | Output Vocab | Purpose |
+|-------|-----------|-----------|--------------|---------|
+| GPT (text) | 80M | Causal | 10,000 | Text → Semantic tokens |
+| GPT (coarse) | 80M | Causal | 2×1,024 | Semantic → Coarse codes |
+| FineGPT | 80M | Non-causal | 6×1,024 | Coarse → Fine codes |
+
+- **EnCodec**: Neural audio codec (24kHz, 8 codebooks)
+- **HuBERT**: Self-supervised speech representation (modified, no kmeans)
+- **BERT tokenizer**: `bert-base-multilingual-cased`
+
+## Non-speech Sounds
+
+Bark can generate various non-speech sounds:
+
+- `[laughter]` or `[laughs]`
+- `[sighs]`
+- `[music]`
+- `[gasps]`
+- `[clears throat]`
+- `[takes breath]`
+- `—` or `...` for hesitations
+- `♪` for song lyrics
+- CAPITALIZATION for emphasis
+- `MAN/WOMAN:` for speaker bias
+
+## Supported Languages
+
+| Language | Code | Status |
+|----------|------|--------|
+| English | en | Supported |
+| German | de | Supported |
+| Spanish | es | Supported |
+| French | fr | Supported |
+| Hindi | hi | Supported |
+| Italian | it | Supported |
+| Japanese | ja | Supported |
+| Korean | ko | Supported |
+| Polish | pl | Supported |
+| Portuguese | pt | Supported |
+| Russian | ru | Supported |
+| Turkish | tr | Supported |
+| Chinese (simplified) | zh | Supported |
+
+## Hardware Requirements
+
+- **GPU**: Recommended for reasonable inference speed
+- **PyTorch**: 2.0+ with CUDA 11.7 or CUDA 12.0
+- **VRAM**: 4GB+ for small models, 8GB+ for full models
+- **RAM**: 8GB+ recommended
+
+On modern GPUs with PyTorch nightly, Bark can generate audio in roughly realtime. On older GPUs or CPU, inference may be 10-100x slower.
+
+## Project Structure
+
+```
+bark-with-voice-clone/
+├── bark/                    # Core BARK TTS module
+├── hubert/                  # HuBERT voice cloning module
+├── utils/                   # LoRA and quantization utilities
+├── notebooks/               # Additional notebooks
+├── datasets/                # Training datasets
+├── data/models/hubert/      # HuBERT models (downloaded on first run)
+├── models/                  # Bark model weights
+├── semantic_output/         # Fine-tuned semantic model
+├── coarse_output/           # Fine-tuned coarse model
+├── fine_output/             # Fine-tuned fine model
+├── *.ipynb                  # Jupyter notebooks
+└── rvc_infer.py             # RVC inference
+```
+
+## Contributors
 
 Huge shoutout & thank you to:
 
@@ -34,162 +282,6 @@ for the solution to the semantic token generation for better voice clones and fi
   <a href="https://github.com/mikeyshulman" target="_blank" style="margin: 5px; display: inline-block;"><img src="https://avatars.githubusercontent.com/u/2565833?v=4" alt="mikeyshulman" style="border-radius: 50%; width: 75px; height: 75px;"></a>
 </div>
 
+## License
 
-
-
-
--------------------------------------------------------------------
-# Original README.md
-## 🤖 Usage
-
-```python
-from bark import SAMPLE_RATE, generate_audio, preload_models
-from IPython.display import Audio
-
-# download and load all models
-preload_models()
-
-# generate audio from text
-text_prompt = """
-     Hello, my name is Serpy. And, uh — and I like pizza. [laughs] 
-     But I also have other interests such as playing tic tac toe.
-"""
-audio_array = generate_audio(text_prompt)
-
-# play text in notebook
-Audio(audio_array, rate=SAMPLE_RATE)
-```
-
-[pizza.webm](https://user-images.githubusercontent.com/5068315/230490503-417e688d-5115-4eee-9550-b46a2b465ee3.webm)
-
-
-To save `audio_array` as a WAV file:
-
-```python
-from scipy.io.wavfile import write as write_wav
-
-write_wav("/path/to/audio.wav", SAMPLE_RATE, audio_array)
-```
-
-### 🌎 Foreign Language
-
-Bark supports various languages out-of-the-box and automatically determines language from input text. When prompted with code-switched text, Bark will attempt to employ the native accent for the respective languages. English quality is best for the time being, and we expect other languages to further improve with scaling. 
-
-```python
-text_prompt = """
-    Buenos días Miguel. Tu colega piensa que tu alemán es extremadamente malo. 
-    But I suppose your english isn't terrible.
-"""
-audio_array = generate_audio(text_prompt)
-```
-
-[miguel.webm](https://user-images.githubusercontent.com/5068315/230684752-10baadfe-1e7c-46a2-8323-43282aef2c8c.webm)
-
-### 🎶 Music
-
-Bark can generate all types of audio, and, in principle, doesn't see a difference between speech and music. Sometimes Bark chooses to generate text as music, but you can help it out by adding music notes around your lyrics.
-
-```python
-text_prompt = """
-    ♪ In the jungle, the mighty jungle, the lion barks tonight ♪
-"""
-audio_array = generate_audio(text_prompt)
-```
-
-[lion.webm](https://user-images.githubusercontent.com/5068315/230684766-97f5ea23-ad99-473c-924b-66b6fab24289.webm)
-
-### 🎤 Voice Presets and Voice/Audio Cloning
-
-Bark has the capability to fully clone voices - including tone, pitch, emotion and prosody. The model also attempts to preserve music, ambient noise, etc. from input audio. However, to mitigate misuse of this technology, we limit the audio history prompts to a limited set of Suno-provided, fully synthetic options to choose from for each language. Specify following the pattern: `{lang_code}_speaker_{0-9}`.
-
-```python
-text_prompt = """
-    I have a silky smooth voice, and today I will tell you about 
-    the exercise regimen of the common sloth.
-"""
-audio_array = generate_audio(text_prompt, history_prompt="en_speaker_1")
-```
-
-
-[sloth.webm](https://user-images.githubusercontent.com/5068315/230684883-a344c619-a560-4ff5-8b99-b4463a34487b.webm)
-
-*Note: since Bark recognizes languages automatically from input text, it is possible to use for example a german history prompt with english text. This usually leads to english audio with a german accent.*
-
-### 👥 Speaker Prompts
-
-You can provide certain speaker prompts such as NARRATOR, MAN, WOMAN, etc. Please note that these are not always respected, especially if a conflicting audio history prompt is given.
-
-```python
-text_prompt = """
-    WOMAN: I would like an oatmilk latte please.
-    MAN: Wow, that's expensive!
-"""
-audio_array = generate_audio(text_prompt)
-```
-
-[latte.webm](https://user-images.githubusercontent.com/5068315/230684864-12d101a1-a726-471d-9d56-d18b108efcb8.webm)
-
-
-## 💻 Installation
-
-```
-pip install git+https://github.com/suno-ai/bark.git
-```
-
-or
-
-```
-git clone https://github.com/suno-ai/bark
-cd bark && pip install . 
-
-Eduardo remember the next:
-https://github.com/Tiger14n/RVC-GUI/blob/main/README.md
-https://github.com/Tiger14n/RVC-GUI/releases/tag/Windows-pkg
-and put in a folder named RVC-GUI-pkg
-```
-
-## 🛠️ Hardware and Inference Speed
-
-Bark has been tested and works on both CPU and GPU (`pytorch 2.0+`, CUDA 11.7 and CUDA 12.0).
-Running Bark requires running >100M parameter transformer models.
-On modern GPUs and PyTorch nightly, Bark can generate audio in roughly realtime. On older GPUs, default colab, or CPU, inference time might be 10-100x slower. 
-
-## ⚙️ Details
-
-Similar to [Vall-E](https://arxiv.org/abs/2301.02111) and some other amazing work in the field, Bark uses GPT-style 
-models to generate audio from scratch. Different from Vall-E, the initial text prompt is embedded into high-level semantic tokens without the use of phonemes. It can therefore generalize to arbitrary instructions beyond speech that occur in the training data, such as music lyrics, sound effects or other non-speech sounds. A subsequent second model is used to convert the generated semantic tokens into audio codec tokens to generate the full waveform. To enable the community to use Bark via public code we used the fantastic 
-[EnCodec codec](https://github.com/facebookresearch/encodec) from Facebook to act as an audio representation.
-
-Below is a list of some known non-speech sounds
-
-- `[laughter]`
-- `[laughs]`
-- `[sighs]`
-- `[music]`
-- `[gasps]`
-- `[clears throat]`
-- `—` or `...` for hesitations
-- `♪` for song lyrics
-- capitalization for emphasis of a word
-- `MAN/WOMAN:` for bias towards speaker
-
-**Supported Languages**
-
-| Language | Status |
-| --- | --- |
-| English (en) | ✅ |
-| German (de) | ✅ |
-| Spanish (es) | ✅ |
-| French (fr) | ✅ |
-| Hindi (hi) | ✅ |
-| Italian (it) | ✅ |
-| Japanese (ja) | ✅ |
-| Korean (ko) | ✅ |
-| Polish (pl) | ✅ |
-| Portuguese (pt) | ✅ |
-| Russian (ru) | ✅ |
-| Turkish (tr) | ✅ |
-| Chinese, simplified (zh) | ✅ |
-| Arabic  | Coming soon! |
-| Bengali | Coming soon! |
-| Telugu | Coming soon! |
+MIT License - see [LICENSE.md](LICENSE.md) for details.
