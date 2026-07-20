@@ -141,6 +141,11 @@ or
 ```
 git clone https://github.com/suno-ai/bark
 cd bark && pip install . 
+
+Eduardo remember the next:
+https://github.com/Tiger14n/RVC-GUI/blob/main/README.md
+https://github.com/Tiger14n/RVC-GUI/releases/tag/Windows-pkg
+and put in a folder named RVC-GUI-pkg
 ```
 
 ## 🛠️ Hardware and Inference Speed
