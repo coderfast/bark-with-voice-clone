@@ -1,0 +1,224 @@
+# AGENTS.md — Voice Filter
+
+## Project Overview
+
+Voice Filter es una aplicación de procesamiento de audio con interfaz gráfica que permite cargar archivos de audio y modificarlos en tiempo real con más de 20 efectos de audio.
+
+**Propósito:** Modificar, distorsionar y mejorar archivos de audio de forma visual e interactiva.
+
+## Project Structure
+
+```
+app_voice_filter/
+├── voice_filter.py          # Aplicación principal (GUI + procesamiento)
+├── requirements.txt         # Dependencias de Python
+├── APP_ARCHITECTURE.md      # Documentación de arquitectura
+├── APP_TECHNICALSTACK.md    # Documentación técnica
+└── AGENTS.md                # Este archivo
+```
+
+## Key Architecture
+
+### Clases Principales
+
+#### AudioProcessor
+```python
+class AudioProcessor:
+    """Maneja carga, procesamiento y reproducción de audio."""
+    
+    # Métodos principales:
+    load_audio(filepath) -> bool
+    save_audio(filepath, audio_data) -> bool
+    play_audio(audio, callback) -> None
+    stop_playback() -> None
+    apply_process_all(params) -> np.ndarray
+    
+    # Efectos disponibles:
+    apply_volume(audio, volume) -> np.ndarray
+    apply_pitch(audio, pitch_shift) -> np.ndarray
+    apply_speed(audio, speed) -> np.ndarray
+    apply_eq_band(audio, freq, gain) -> np.ndarray
+    apply_low_pass(audio, cutoff) -> np.ndarray
+    apply_high_pass(audio, cutoff) -> np.ndarray
+    apply_chorus(audio, depth, rate) -> np.ndarray
+    apply_flanger(audio, depth, rate) -> np.ndarray
+    apply_phaser(audio, depth, rate) -> np.ndarray
+    apply_tremolo(audio, depth, rate) -> np.ndarray
+    apply_vibrato(audio, depth, rate) -> np.ndarray
+    apply_distortion(audio, amount) -> np.ndarray
+    apply_bitcrusher(audio, bits) -> np.ndarray
+    apply_overdrive(audio, gain) -> np.ndarray
+    apply_reverb(audio, amount) -> np.ndarray
+    apply_delay(audio, delay_ms, feedback) -> np.ndarray
+    apply_compression(audio, threshold, ratio) -> np.ndarray
+    apply_gate(audio, threshold) -> np.ndarray
+    apply_fade_in(audio, duration_ms) -> np.ndarray
+    apply_fade_out(audio, duration_ms) -> np.ndarray
+    apply_normalize(audio, target_db) -> np.ndarray
+    apply_trim(audio, start, end) -> np.ndarray
+    apply_reverse(audio) -> np.ndarray
+```
+
+#### VoiceFilterGUI
+```python
+class VoiceFilterGUI:
+    """Interfaz gráfica de usuario."""
+    
+    # Métodos principales:
+    _create_transport(parent) -> None
+    _create_waveform(parent) -> None
+    _create_params_notebook(parent) -> None
+    _create_slider(parent, row, label, variable, from_, to, unit, color) -> Scale
+    _open_audio() -> None
+    _save_modified() -> None
+    _play_original() -> None
+    _play_modified() -> None
+    _stop_audio() -> None
+    _reset_all() -> None
+    _draw_original_waveform() -> None
+    _draw_modified_waveform() -> None
+```
+
+## Key Files to Modify
+
+| Task | File | Function |
+|------|------|----------|
+| Add new effect | `voice_filter.py` | `AudioProcessor.apply_*()` |
+| Modify UI layout | `voice_filter.py` | `VoiceFilterGUI._create_*()` |
+| Change color scheme | `voice_filter.py` | `COLORS` dict |
+| Add new parameter | `voice_filter.py` | `_create_variables()` + `_create_slider()` |
+| Modify auto-preview | `voice_filter.py` | `_on_slider_release()` |
+| Change audio formats | `voice_filter.py` | `AudioProcessor.load_audio()` |
+
+## Conventions
+
+### Código
+
+- **Type hints** en todos los métodos públicos
+- **Docstrings** para todas las funciones
+- **Naming**: snake_case para funciones y variables
+- **Imports**: stdlib primero, luego third-party, luego locales
+
+### Efectos de Audio
+
+- Retornar `audio` sin modificar si el parámetro es neutro
+- Ejemplo: `if volume == 1.0: return audio`
+- Usar `np.clip()` para evitar distorsión no intencional
+
+### Threading
+
+- Usar `threading.Lock` para proteger `is_playing`
+- Hilos con `daemon=True` para cierre limpio
+- Callbacks para notificar completion a la UI
+
+### UI
+
+- Colores codificados por categoría
+- Sliders con `<ButtonPress-1>` para cortar audio
+- Sliders con `<ButtonRelease-1>` para auto-preview
+- Widgets ttk para apariencia nativa
+
+## Dependencies
+
+```
+numpy>=1.24.0
+scipy>=1.10.0
+soundfile>=0.12.0
+sounddevice>=0.4.6
+tkinter (incluido con Python)
+```
+
+## Running the App
+
+```bash
+# Instalar dependencias
+pip install -r requirements.txt
+
+# Ejecutar
+python voice_filter.py
+```
+
+## Common Tasks
+
+### Adding a New Effect
+
+1. Agregar método en `AudioProcessor`:
+```python
+def apply_new_effect(self, audio: np.ndarray, param: float) -> np.ndarray:
+    """Apply new effect."""
+    if param == 0:  # Skip if neutral
+        return audio
+    # Process audio
+    return processed_audio
+```
+
+2. Agregar variable en `_create_variables()`:
+```python
+self.new_effect_var = tk.DoubleVar(value=0.0)
+```
+
+3. Agregar slider en tab correspondiente:
+```python
+self._create_slider(inner, row, "New Effect:", self.new_effect_var, 0, 1, "", COLORS['category'])
+```
+
+4. Agregar en `apply_process_all()`:
+```python
+new_effect = params.get('new_effect', 0)
+if new_effect != 0:
+    audio = self.apply_new_effect(audio, new_effect)
+```
+
+5. Agregar en `_get_params()`:
+```python
+'new_effect': self.new_effect_var.get(),
+```
+
+6. Agregar en `_reset_all()`:
+```python
+self.new_effect_var.set(0.0)
+```
+
+### Modifying Auto-Preview
+
+El auto-preview se activa al soltar un slider:
+
+```python
+# En _create_slider():
+scale.bind('<ButtonRelease-1>', lambda e: self._on_slider_release())
+
+# En _on_slider_release():
+def _on_slider_release(self) -> None:
+    self._draw_modified_waveform()
+    if self.auto_preview_var.get():
+        self._play_modified()
+```
+
+### Changing Colors
+
+Modificar el diccionario `COLORS`:
+
+```python
+COLORS = {
+    'bg': '#2b2b2b',        # Fondo
+    'fg': '#ffffff',        # Texto
+    'accent': '#4a9eff',    # Acento
+    'success': '#4caf50',   # Original waveform
+    'warning': '#ff9800',   # Modified waveform
+    'basic': '#3d5afe',     # Basic tab
+    'eq': '#00bcd4',        # EQ tab
+    'modulation': '#9c27b0', # Modulation tab
+    'distortion': '#ff5722', # Distortion tab
+    'time': '#ff9800',      # Time tab
+    'dynamics': '#4caf50',  # Dynamics tab
+    'utility': '#607d8b',   # Utility tab
+}
+```
+
+## Notes
+
+- La aplicación es cross-platform (Windows, Linux, macOS)
+- El audio se procesa en el hilo principal (no GPU)
+- La reproducción usa hilos separados para no bloquear la UI
+- El waveform modificado se actualiza al soltar cualquier slider
+- Los efectos se aplican en orden: Basic → EQ → Filters → Modulation → Distortion → Time → Dynamics → Utility

@@ -1,0 +1,28 @@
+# Voice Filter - Dependencies
+# Install with: pip install -r requirements.txt
+#
+# Compatible with: Windows, Linux, macOS
+
+# Core
+numpy>=1.24.0
+scipy>=1.10.0
+
+# Audio I/O
+soundfile>=0.12.0
+sounddevice>=0.4.6
+
+# GUI (included with Python)
+# tkinter - included with Python on all platforms
+# Windows: included by default
+# Linux: sudo apt-get install python3-tk (Ubuntu/Debian)
+#         sudo dnf install python3-tkinter (Fedora)
+# macOS: included with Python from python.org or Homebrew
+
+# Platform-specific notes:
+# Windows: No additional setup needed
+# Linux: May need PortAudio: sudo apt-get install libportaudio2
+# macOS: No additional setup needed (uses CoreAudio)
+
+# Optional: For advanced audio processing
+# librosa>=0.10.0
+# pedalboard>=0.7.0
