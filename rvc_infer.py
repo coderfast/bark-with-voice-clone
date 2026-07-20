@@ -3,7 +3,8 @@ RVC (Retrieval-based Voice Conversion) inference module.
 
 This module provides voice conversion capabilities using RVC models.
 It requires the Retrieval-based-Voice-Conversion-WebUI repository to be
-cloned in the project root directory.
+cloned in the project root directory. If not present, it will be
+automatically downloaded using the RVCManager.
 
 Global state:
     This module uses global variables for model state. Call get_vc() first
@@ -26,6 +27,18 @@ now_dir = os.getcwd()
 if now_dir not in sys.path:
     sys.path.append(now_dir)
 rvc_path = os.path.join(now_dir, "Retrieval-based-Voice-Conversion-WebUI")
+
+# Auto-download RVC if not present
+try:
+    from utils.rvc_manager import RVCManager
+    if not RVCManager.is_rvc_installed(rvc_path):
+        logger.info("RVC not found. Attempting to download automatically...")
+        rvc_path = RVCManager.make_sure_rvc_installed(install_dir=rvc_path)
+except ImportError:
+    logger.warning("RVCManager not available. Make sure RVC is installed manually.")
+except Exception as e:
+    logger.warning(f"Could not auto-download RVC: {e}. Make sure RVC is installed.")
+
 if rvc_path not in sys.path:
     sys.path.append(rvc_path)
 
