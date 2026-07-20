@@ -6,6 +6,7 @@ License: MIT
 
 import json
 import os.path
+from typing import Optional
 from zipfile import ZipFile
 
 import numpy
@@ -44,11 +45,20 @@ class CustomTokenizer(nn.Module):
         return x
 
     @torch.no_grad()
-    def get_token(self, x):
-        """
-        Used to get the token for the first
-        :param x: An array with shape (N, input_size) where N is a whole number greater or equal to 1, and input_size is the input size used when creating the model.
-        :return: An array with shape (N,) where N is the same as N from the input. Every number in the array is a whole number in range 0...output_size - 1 where output_size is the output size used when creating the model.
+    def get_token(self, x: torch.Tensor) -> torch.Tensor:
+        """Get the most likely token ID for each input vector.
+
+        Takes HuBERT feature vectors and returns the index of the most likely
+        token class for each position. This is used to quantize continuous
+        speech features into discrete tokens for voice cloning.
+
+        Args:
+            x: An array with shape (N, input_size) where N is the number of
+                frames and input_size matches the model's input_size (default 768).
+
+        Returns:
+            An array with shape (N,) where each value is a token ID in range
+            0...output_size-1 (default 0-9999).
         """
         return torch.argmax(self(x), dim=1)
 
@@ -79,7 +89,8 @@ class CustomTokenizer(nn.Module):
 
         y_train_hot = torch.zeros(len(y_train), self.output_size)
         y_train_hot[range(len(y_train)), y_train] = 1
-        y_train_hot = y_train_hot.to('cuda')
+        device = next(self.parameters()).device
+        y_train_hot = y_train_hot.to(device)
 
         # Calculate the loss
         loss = lossfunc(y_pred, y_train_hot)
@@ -150,15 +161,16 @@ class Data:
         return json.dumps(data)
 
 
-def auto_train(data_path, save_path='model.pth', load_model: str | None = None, save_epochs=1):
+def auto_train(data_path, save_path='model.pth', load_model: Optional[str] = None, save_epochs=1):
     data_x, data_y = [], []
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if load_model and os.path.isfile(load_model):
         print('Loading model from', load_model)
-        model_training = CustomTokenizer.load_from_checkpoint(load_model, 'cuda')
+        model_training = CustomTokenizer.load_from_checkpoint(load_model, device)
     else:
         print('Creating new model.')
-        model_training = CustomTokenizer(version=1).to('cuda')  # Settings for the model to run without lstm
+        model_training = CustomTokenizer(version=1).to(device)  # Settings for the model to run without lstm
     save_path = os.path.join(data_path, save_path)
     base_save_path = '.'.join(save_path.split('.')[:-1])
 
@@ -180,7 +192,7 @@ def auto_train(data_path, save_path='model.pth', load_model: str | None = None, 
         for i in range(save_epochs):
             j = 0
             for x, y in zip(data_x, data_y):
-                model_training.train_step(torch.tensor(x).to('cuda'), torch.tensor(y).to('cuda'), j % 50 == 0)  # Print loss every 50 steps
+                model_training.train_step(torch.tensor(x).to(device), torch.tensor(y).to(device), j % 50 == 0)  # Print loss every 50 steps
                 j += 1
         save_p = save_path
         save_p_2 = f'{base_save_path}_epoch_{epoch}.pth'

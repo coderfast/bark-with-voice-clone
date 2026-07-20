@@ -8,6 +8,7 @@ License: MIT
 # Modified code from https://github.com/lucidrains/audiolm-pytorch/blob/main/audiolm_pytorch/hubert_kmeans.py
 
 from pathlib import Path
+from typing import Optional
 
 import torch
 from torch import nn
@@ -20,52 +21,48 @@ from torchaudio.functional import resample
 from audiolm_pytorch.utils import curtail_to_multiple
 
 import logging
-logging.root.setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.ERROR)
 
 
 def exists(val):
     return val is not None
 
 
-def default(val, d):
-    return val if exists(val) else d
-
-
 class CustomHubert(nn.Module):
-    """
-    checkpoint and kmeans can be downloaded at https://github.com/facebookresearch/fairseq/tree/main/examples/hubert
-    or you can train your own
+    """Custom HuBERT model for voice cloning without kmeans.
+
+    This model extracts semantic features from audio waveforms for use
+    in voice cloning pipelines.
     """
 
     def __init__(
         self,
-        checkpoint_path,
-        target_sample_hz=16000,
-        seq_len_multiple_of=None,
-        output_layer=9,
-        device=None
+        checkpoint_path: str,
+        target_sample_hz: int = 16000,
+        seq_len_multiple_of: Optional[int] = None,
+        output_layer: int = 9,
+        device: Optional[str] = None
     ):
         super().__init__()
         self.target_sample_hz = target_sample_hz
         self.seq_len_multiple_of = seq_len_multiple_of
         self.output_layer = output_layer
 
-        if device is not None:
-            self.to(device)
-
         model_path = Path(checkpoint_path)
 
-        assert model_path.exists(), f'path {checkpoint_path} does not exist'
+        if not model_path.exists():
+            raise FileNotFoundError(f'Checkpoint path does not exist: {checkpoint_path}')
 
-        checkpoint = torch.load(checkpoint_path)
+        checkpoint = torch.load(checkpoint_path, map_location='cpu')
         load_model_input = {checkpoint_path: checkpoint}
         model, *_ = fairseq.checkpoint_utils.load_model_ensemble_and_task(load_model_input)
 
-        if device is not None:
-            model[0].to(device)
-
         self.model = model[0]
         self.model.eval()
+
+        if device is not None:
+            self.model.to(device)
 
     @property
     def groups(self):
@@ -74,10 +71,20 @@ class CustomHubert(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        wav_input,
-        flatten=True,
-        input_sample_hz=None
-    ):
+        wav_input: torch.Tensor,
+        flatten: bool = True,
+        input_sample_hz: Optional[int] = None
+    ) -> torch.Tensor:
+        """Extract semantic features from audio waveform.
+
+        Args:
+            wav_input: Input audio waveform tensor
+            flatten: Whether to flatten the output
+            input_sample_hz: Sample rate of input audio (resamples if different from target)
+
+        Returns:
+            Semantic feature tensor
+        """
         device = wav_input.device
 
         if exists(input_sample_hz):
@@ -95,9 +102,8 @@ class CustomHubert(nn.Module):
 
         embed, packed_shape = pack([embed['x']], '* d')
 
-        # codebook_indices = self.kmeans.predict(embed.cpu().detach().numpy())
-
-        codebook_indices = torch.from_numpy(embed.cpu().detach().numpy()).to(device)  # .long()
+        # Convert to tensor directly without unnecessary numpy roundtrip
+        codebook_indices = embed.to(device)
 
         if flatten:
             return codebook_indices

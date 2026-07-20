@@ -11,17 +11,20 @@ requires-python = ">=3.8"
 authors =  [
     {name = "Suno Inc", email = "hello@suno.ai"},
 ]
-# Apache 2.0
-license = {file = "LICENSE"}
+# MIT License
+license = {file = "LICENSE.md"}
 
 dependencies = [
     "boto3",
     "encodec",
+    "fairseq",
     "funcy",
+    "huggingface-hub",
     "numpy",
     "scipy",
     "tokenizers",
     "torch",
+    "torchaudio",
     "tqdm",
     "transformers",
 ]
@@ -35,7 +38,6 @@ dev = [
     "black",
     "codecov",
     "flake8",
-    "huggingface-hub",
     "hypothesis>=6.14,<7",
     "isort>=5.0.0,<6",
     "jupyter",
@@ -47,9 +49,15 @@ dev = [
     "pytest",
     "pytest-cov",
 ]
+training = [
+    "accelerate",
+    "bitsandbytes",
+    "diffusers",
+    "wandb",
+]
 
 [tool.setuptools]
-packages = ["bark"]
+packages = ["bark", "hubert", "utils"]
 
 [tool.setuptools.package-data]
 bark = ["assets/prompts/*.npz"]

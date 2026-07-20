@@ -1,3 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Environment variables
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project specific
 __pycache__/
 *.wav
 _temp/
@@ -5,8 +54,12 @@ models/
 wandb/
 *_output/
 output.npz
-joe_biden_state_of_union/
+datasets/*/  # All dataset subdirectories
 Retrieval-based-Voice-Conversion-WebUI/
-devin-youtube/
-train_rvc.ipynb
 *.pt
+__hugginface_downloads/
+
+# Bark assets (keep prompts in repo, ignore app_clone_voice copies)
+/app_clone_voice/bark/assets/prompts/*.npz
+/build/lib/bark/assets/prompts/*.npz
+/bark/assets/prompts/mi_voz.npz
