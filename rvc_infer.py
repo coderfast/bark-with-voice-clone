@@ -246,7 +246,7 @@ def get_vc(model_path: str, device_: str, is_half_: bool) -> None:
     is_half = is_half_
     config = Config(device, is_half)
     logger.info(f"Loading RVC model: {model_path}")
-    cpt = torch.load(model_path, map_location="cpu")
+    cpt = torch.load(model_path, map_location="cpu", weights_only=False)
     tgt_sr = cpt["config"][-1]
     cpt["config"][-3] = cpt["weight"]["emb_g.weight"].shape[0]  # n_spk
     if_f0 = cpt.get("f0", 1)

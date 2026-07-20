@@ -190,11 +190,49 @@ def _md5(fname):
 
 
 def _get_ckpt_path(model_type, use_small=False, path=None):
+    """Get the path to a model checkpoint file.
+
+    This function checks for models in the following order:
+    1. Custom path (if provided)
+    2. Local output directories (semantic_output, coarse_output, fine_output)
+    3. CACHE_DIR (HuggingFace cache)
+
+    Args:
+        model_type: Type of model ("text", "coarse", or "fine")
+        use_small: Whether to use small model variant
+        path: Custom path to model file or directory
+
+    Returns:
+        Path to the model checkpoint file
+    """
     model_key = f"{model_type}_small" if use_small or USE_SMALL_MODELS else model_type
     model_name = REMOTE_MODEL_PATHS[model_key]["file_name"]
-    if path is None:
-        path = CACHE_DIR
-    return os.path.join(path, f"{model_name}")
+
+    # Check custom path first
+    if path is not None:
+        custom_path = os.path.join(path, model_name) if not os.path.isfile(path) else path
+        if os.path.exists(custom_path):
+            return custom_path
+
+    # Check local output directories (where fine-tuned models are saved)
+    local_dirs = {
+        "text": "semantic_output",
+        "coarse": "coarse_output",
+        "fine": "fine_output",
+    }
+    if model_type in local_dirs:
+        local_dir = local_dirs[model_type]
+        local_path = os.path.join(local_dir, model_name)
+        # Also check for pytorch_model.bin (common training output name)
+        alt_names = [model_name, "pytorch_model.bin"]
+        for alt_name in alt_names:
+            alt_path = os.path.join(local_dir, alt_name)
+            if os.path.exists(alt_path):
+                logger.info(f"Found local model at {alt_path}")
+                return alt_path
+
+    # Fall back to CACHE_DIR (will download if not exists)
+    return os.path.join(CACHE_DIR, model_name)
 
 
 def _grab_best_device(use_gpu=True):
@@ -305,7 +343,7 @@ def _load_model(ckpt_path, device, use_small=False, model_type="text"):
     if not os.path.exists(ckpt_path):
         logger.info(f"{model_type} model not found, downloading into `{CACHE_DIR}`.")
         _download(model_info["repo_id"], model_info["file_name"], ckpt_path)
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
     # this is a hack
     # check if config.json is in the same directory as the checkpoint
     # if so, load it

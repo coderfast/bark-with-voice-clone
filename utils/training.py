@@ -259,7 +259,7 @@ def _load_model(
         print(f"{model_type} model not found, downloading into `{CACHE_DIR}`.")
         _download(model_info["repo_id"], model_info["file_name"], ckpt_path)
 
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
 
     # Check for config.json in same directory as checkpoint
     config_path = os.path.join(os.path.dirname(ckpt_path), "config.json")
