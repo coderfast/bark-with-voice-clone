@@ -1,0 +1,1 @@
+Here put a portable ffmpeg or set your ffmpeg installation in your path

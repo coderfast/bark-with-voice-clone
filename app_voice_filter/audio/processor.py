@@ -1,6 +1,14 @@
+import os
+import sys
 import threading
 import numpy as np
 from typing import Optional, Dict, Any
+
+# Configure ffmpeg path for pydub
+_app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_ffmpeg_dir = os.path.join(_app_dir, 'ffmpeg', 'bin')
+if os.path.isdir(_ffmpeg_dir):
+    os.environ['PATH'] = _ffmpeg_dir + os.pathsep + os.environ.get('PATH', '')
 
 
 class AudioProcessor:
@@ -16,7 +24,8 @@ class AudioProcessor:
         self._play_lock = threading.Lock()
 
     def load_audio(self, filepath: str) -> bool:
-        """Load audio file."""
+        """Load audio file. Tries soundfile first, then pydub for MP3/AAC/M4A/WMA."""
+        # Try soundfile first (WAV, FLAC, OGG, AIFF)
         try:
             import soundfile as sf
             data, sr = sf.read(filepath)
@@ -27,19 +36,72 @@ class AudioProcessor:
             self.original_audio = data.copy()
             self.duration = len(data) / sr
             return True
+        except Exception:
+            pass
+
+        # Fallback to pydub for MP3, AAC, M4A, WMA (requires ffmpeg)
+        try:
+            from pydub import AudioSegment
+            audio_segment = AudioSegment.from_file(filepath)
+            # Convert to numpy array
+            samples = np.array(audio_segment.get_array_of_samples(), dtype=np.float32)
+            if audio_segment.channels == 2:
+                samples = samples.reshape((-1, 2))
+                samples = np.mean(samples, axis=1)
+            # Normalize to -1.0 to 1.0
+            max_val = np.max(np.abs(samples))
+            if max_val > 0:
+                samples = samples / max_val
+            self.audio_data = samples
+            self.sample_rate = audio_segment.frame_rate
+            self.original_audio = samples.copy()
+            self.duration = len(samples) / audio_segment.frame_rate
+            return True
+        except ImportError:
+            print("Error: pydub not installed. Run: pip install pydub")
+            print("Also requires ffmpeg in app_voice_filter/ffmpeg/bin/ or in PATH")
+            return False
         except Exception as e:
             print(f"Error loading audio: {e}")
             return False
 
     def save_audio(self, filepath: str, audio_data: Optional[np.ndarray] = None) -> bool:
-        """Save audio file."""
+        """Save audio file. Supports WAV/FLAC via soundfile, MP3 via pydub+ffmpeg."""
+        data = audio_data if audio_data is not None else self.audio_data
+        if data is None:
+            return False
+
+        ext = os.path.splitext(filepath)[1].lower()
+
+        # MP3 export via pydub
+        if ext == '.mp3':
+            try:
+                from pydub import AudioSegment
+                # Convert numpy array to pydub AudioSegment
+                samples = (data * 32767).astype(np.int16)
+                audio_segment = AudioSegment(
+                    samples.tobytes(),
+                    frame_rate=self.sample_rate,
+                    sample_width=2,
+                    channels=1
+                )
+                audio_segment.export(filepath, format="mp3")
+                return True
+            except ImportError:
+                print("Error: pydub not installed. Run: pip install pydub")
+                return False
+            except Exception as e:
+                print(f"Error saving MP3: {e}")
+                return False
+
+        # WAV/FLAC/OGG export via soundfile
         try:
             import soundfile as sf
-            data = audio_data if audio_data is not None else self.audio_data
-            if data is None:
-                return False
             sf.write(filepath, data, self.sample_rate)
             return True
+        except ImportError:
+            print("Error: soundfile not installed. Run: pip install soundfile")
+            return False
         except Exception as e:
             print(f"Error saving audio: {e}")
             return False
@@ -47,6 +109,15 @@ class AudioProcessor:
     def play_audio(self, audio: np.ndarray, callback: Optional[callable] = None,
                    playback_id: int = 0) -> None:
         """Play audio in a separate thread."""
+        try:
+            import sounddevice as sd
+        except ImportError:
+            print("Error: sounddevice not installed. Run: pip install sounddevice")
+            return
+        except OSError as e:
+            print(f"Error: audio backend not available ({e}). On Linux, install libportaudio2.")
+            return
+
         # Stop any ongoing playback first (must be outside lock to avoid deadlock)
         was_playing = False
         with self._play_lock:
@@ -54,14 +125,12 @@ class AudioProcessor:
             self.is_playing = True
         if was_playing:
             try:
-                import sounddevice as sd
                 sd.stop()
             except Exception:
                 pass
 
         def _play():
             try:
-                import sounddevice as sd
                 sd.play(audio, self.sample_rate)
                 sd.wait()
             except Exception as e:

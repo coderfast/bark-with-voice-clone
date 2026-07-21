@@ -411,7 +411,7 @@ class VoiceFilterGUI:
             return
         filepath = filedialog.asksaveasfilename(
             defaultextension=".wav",
-            filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            filetypes=[("WAV files", "*.wav"), ("MP3 files", "*.mp3"), ("All files", "*.*")],
             initialdir=self._last_audio_dir,
             initialfile="modified_audio.wav"
         )

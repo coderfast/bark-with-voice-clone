@@ -11,6 +11,8 @@ Pillow>=9.0.0
 # Audio I/O
 soundfile>=0.12.0
 sounddevice>=0.4.6
+pydub>=0.25.1
+audioop-lts>=0.2.0; python_version>="3.13"
 
 # GUI (included with Python)
 # tkinter - included with Python on all platforms
