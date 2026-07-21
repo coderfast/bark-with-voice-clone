@@ -31,6 +31,17 @@ app_voice_filter/
 
 ## Arquitectura de la Aplicación
 
+### Archivos por Módulo
+
+| Módulo | Archivo | Contenido |
+|--------|---------|-----------|
+| `config/` | `colors.py` | Diccionario COLORS (35 colores) |
+| `audio/` | `processor.py` | AudioProcessor: carga, efectos, playback (~434 líneas) |
+| `widgets/` | `mixer_fader.py` | MixerFader: fader custom con LED meter (~269 líneas) |
+| `widgets/` | `vu_meter.py` | AnalogVUMeter: VU meter con física de aguja (~163 líneas) |
+| `gui/` | `app.py` | VoiceFilterGUI: clase principal (~607 líneas) |
+| `gui/` | `tabs.py` | 8 funciones de creación de pestañas (~401 líneas) |
+
 ### Componentes Principales
 
 ```
@@ -222,19 +233,25 @@ AudioProcessor.save_audio()
 # Lock para proteger is_playing
 self._play_lock = threading.Lock()
 
-def play_audio(self, audio, callback=None):
+def play_audio(self, audio, callback=None, playback_id=0):
+    # Detener reproducción previa (fuera del lock para evitar deadlock)
+    was_playing = False
     with self._play_lock:
-        if self.is_playing:
-            self.stop_playback()
+        was_playing = self.is_playing
         self.is_playing = True
-    
+    if was_playing:
+        import sounddevice as sd
+        sd.stop()
+
     def _play():
-        # ... reproducción ...
+        import sounddevice as sd
+        sd.play(audio, self.sample_rate)
+        sd.wait()
         with self._play_lock:
             self.is_playing = False
         if callback:
-            callback()
-    
+            callback(playback_id)
+
     thread = threading.Thread(target=_play, daemon=True)
     thread.start()
 ```

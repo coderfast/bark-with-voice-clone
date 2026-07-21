@@ -128,12 +128,13 @@ class MixerFader(tk.Canvas):
 
 | Task | File | Function |
 |------|------|----------|
-| Add new effect | `voice_filter.py` | `AudioProcessor.apply_*()` |
-| Modify UI layout | `voice_filter.py` | `VoiceFilterGUI._create_*()` |
-| Change color scheme | `voice_filter.py` | `COLORS` dict |
-| Add new parameter | `voice_filter.py` | `_create_variables()` + `_create_slider()` |
-| Modify auto-preview | `voice_filter.py` | `_on_slider_release()` |
-| Change audio formats | `voice_filter.py` | `AudioProcessor.load_audio()` |
+| Add new effect | `audio/processor.py` | `AudioProcessor.apply_*()` |
+| Modify UI layout | `gui/app.py` | `VoiceFilterGUI._create_*()` |
+| Change color scheme | `config/colors.py` | `COLORS` dict |
+| Add new parameter | `gui/app.py` | `_create_variables()` |
+| Add new tab slider | `gui/tabs.py` | `create_slider()` + `create_*_tab()` |
+| Modify auto-preview | `gui/app.py` | `_on_slider_release()` |
+| Change audio formats | `audio/processor.py` | `AudioProcessor.load_audio()` |
 
 ## Conventions
 
@@ -187,7 +188,7 @@ python voice_filter.py
 
 ### Adding a New Effect
 
-1. Agregar método en `AudioProcessor`:
+1. Agregar método en `AudioProcessor` (`audio/processor.py`):
 ```python
 def apply_new_effect(self, audio: np.ndarray, param: float) -> np.ndarray:
     """Apply new effect."""
@@ -197,29 +198,29 @@ def apply_new_effect(self, audio: np.ndarray, param: float) -> np.ndarray:
     return processed_audio
 ```
 
-2. Agregar variable en `_create_variables()`:
+2. Agregar variable en `_create_variables()` (`gui/app.py`):
 ```python
 self.new_effect_var = tk.DoubleVar(value=0.0)
 ```
 
-3. Agregar slider en tab correspondiente:
+3. Agregar slider en tab correspondiente (`gui/tabs.py`):
 ```python
-self._create_slider(inner, row, "New Effect:", self.new_effect_var, 0, 1, "", COLORS['category'])
+create_slider(gui, inner, row, "New Effect:", gui.new_effect_var, 0, 1, "", COLORS['category'])
 ```
 
-4. Agregar en `apply_process_all()`:
+4. Agregar en `apply_process_all()` (`audio/processor.py`):
 ```python
 new_effect = params.get('new_effect', 0)
 if new_effect != 0:
     audio = self.apply_new_effect(audio, new_effect)
 ```
 
-5. Agregar en `_get_params()`:
+5. Agregar en `_get_params()` (`gui/app.py`):
 ```python
 'new_effect': self.new_effect_var.get(),
 ```
 
-6. Agregar en `_reset_all()`:
+6. Agregar en `_reset_all()` (`gui/app.py`):
 ```python
 self.new_effect_var.set(0.0)
 ```
@@ -229,10 +230,10 @@ self.new_effect_var.set(0.0)
 El auto-preview se activa al soltar un slider:
 
 ```python
-# En _create_slider():
-scale.bind('<ButtonRelease-1>', lambda e: self._on_slider_release())
+# En gui/tabs.py → create_slider():
+on_release=lambda: gui._on_slider_release()
 
-# En _on_slider_release():
+# En gui/app.py → _on_slider_release():
 def _on_slider_release(self) -> None:
     self._draw_modified_waveform()
     if self.auto_preview_var.get():
@@ -241,7 +242,7 @@ def _on_slider_release(self) -> None:
 
 ### Changing Colors
 
-Modificar el diccionario `COLORS`:
+Modificar el diccionario `COLORS` en `config/colors.py`:
 
 ```python
 COLORS = {
