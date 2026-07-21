@@ -72,12 +72,20 @@ class AudioProcessor:
             print(f"Error saving audio: {e}")
             return False
 
-    def play_audio(self, audio: np.ndarray, callback: Optional[callable] = None) -> None:
+    def play_audio(self, audio: np.ndarray, callback: Optional[callable] = None,
+                   playback_id: int = 0) -> None:
         """Play audio in a separate thread."""
+        # Stop any ongoing playback first (must be outside lock to avoid deadlock)
+        was_playing = False
         with self._play_lock:
-            if self.is_playing:
-                self.stop_playback()
+            was_playing = self.is_playing
             self.is_playing = True
+        if was_playing:
+            try:
+                import sounddevice as sd
+                sd.stop()
+            except Exception:
+                pass
 
         def _play():
             try:
@@ -90,7 +98,7 @@ class AudioProcessor:
                 with self._play_lock:
                     self.is_playing = False
                 if callback:
-                    callback()
+                    callback(playback_id)
 
         thread = threading.Thread(target=_play, daemon=True)
         thread.start()
@@ -956,6 +964,8 @@ class VoiceFilterGUI:
         self.faders: list = []
         self.isAnimating = False
         self.animation_id = None
+        self._animation_generation = 0
+        self._playback_id = 0
         self.playback_position = 0
         self.playback_audio = None
         self.playback_sample_rate = None
@@ -1715,12 +1725,17 @@ class VoiceFilterGUI:
             messagebox.showwarning("Warning", "No audio loaded")
             return
         self._log("Playing original...")
+        self._stop_animation()
+        self._playback_id += 1
+        current_id = self._playback_id
         self.playback_audio = self.processor.original_audio
         self.playback_sample_rate = self.processor.sample_rate
         self.playback_position = 0
         self._start_animation()
         self.processor.play_audio(self.processor.original_audio,
-                                  callback=lambda: self.root.after(0, self._on_playback_finished))
+                                  callback=lambda pid: self.root.after(
+                                      0, self._on_playback_finished, pid),
+                                  playback_id=current_id)
 
     def _play_modified(self) -> None:
         """Play modified audio with meter animation."""
@@ -1728,12 +1743,17 @@ class VoiceFilterGUI:
             return
         processed = self.processor.apply_process_all(self._get_params())
         self._log("Playing modified...")
+        self._stop_animation()
+        self._playback_id += 1
+        current_id = self._playback_id
         self.playback_audio = processed
         self.playback_sample_rate = self.processor.sample_rate
         self.playback_position = 0
         self._start_animation()
         self.processor.play_audio(processed,
-                                  callback=lambda: self.root.after(0, self._on_playback_finished))
+                                  callback=lambda pid: self.root.after(
+                                      0, self._on_playback_finished, pid),
+                                  playback_id=current_id)
 
     def _stop_audio(self) -> None:
         """Stop audio playback and animation."""
@@ -1741,19 +1761,23 @@ class VoiceFilterGUI:
         self.processor.stop_playback()
         self._log("Stopped")
 
-    def _on_playback_finished(self) -> None:
-        """Handle playback completion."""
+    def _on_playback_finished(self, playback_id: int = 0) -> None:
+        """Handle playback completion. Ignores if not the current playback."""
+        if playback_id != self._playback_id:
+            return
         self._stop_animation()
         self._log("Playback finished")
 
     def _start_animation(self) -> None:
         """Start meter animation."""
+        self._animation_generation += 1
         self.isAnimating = True
-        self._animate_meters()
+        self._animate_meters(self._animation_generation)
 
     def _stop_animation(self) -> None:
         """Stop meter animation and let needles fall to 0."""
         self.isAnimating = False
+        self._animation_generation += 1
         self.playback_audio = None
         if self.animation_id is not None:
             self.root.after_cancel(self.animation_id)
@@ -1768,8 +1792,11 @@ class VoiceFilterGUI:
         if hasattr(self, 'vu_value_label') and self.vu_value_label.winfo_exists():
             self.vu_value_label.configure(text="-20.0 dB")
 
-    def _animate_meters(self) -> None:
+    def _animate_meters(self, generation: int = 0) -> None:
         """Update meter levels based on audio position."""
+        # Bail out if this animation instance has been superseded
+        if generation != self._animation_generation:
+            return
         if not self.isAnimating or self.playback_audio is None:
             return
 
@@ -1826,7 +1853,7 @@ class VoiceFilterGUI:
 
         # Schedule next update (~30fps)
         if self.isAnimating:
-            self.animation_id = self.root.after(33, self._animate_meters)
+            self.animation_id = self.root.after(33, lambda: self._animate_meters(generation))
 
     def _get_params(self) -> Dict[str, Any]:
         """Get all current parameters."""
