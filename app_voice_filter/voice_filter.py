@@ -454,14 +454,22 @@ class AudioProcessor:
         return audio
 
 
-# Color scheme
+# Color scheme - Professional mixer console style
 COLORS = {
-    'bg': '#2b2b2b',
-    'fg': '#ffffff',
+    # Main background - dark brushed metal
+    'bg': '#1a1a1a',
+    'bg_light': '#252525',
+    'bg_medium': '#2a2a2a',
+    'fg': '#e0e0e0',
+    'fg_dim': '#888888',
     'accent': '#4a9eff',
+
+    # Status colors
     'success': '#4caf50',
     'warning': '#ff9800',
     'error': '#f44336',
+
+    # Channel strip colors (one per tab)
     'basic': '#3d5afe',
     'eq': '#00bcd4',
     'modulation': '#9c27b0',
@@ -469,7 +477,296 @@ COLORS = {
     'time': '#ff9800',
     'dynamics': '#4caf50',
     'utility': '#607d8b',
+
+    # Fader styling
+    'fader_track': '#0d0d0d',
+    'fader_groove': '#1a1a1a',
+    'fader_thumb': '#555555',
+    'fader_thumb_active': '#777777',
+    'fader_thumb_edge': '#333333',
+
+    # LED indicators
+    'led_off': '#0a0a0a',
+    'led_green': '#00cc00',
+    'led_green_dim': '#004400',
+    'led_yellow': '#cccc00',
+    'led_yellow_dim': '#444400',
+    'led_red': '#cc0000',
+    'led_red_dim': '#440000',
+
+    # Channel strip styling
+    'channel_bg': '#1e1e1e',
+    'channel_border': '#333333',
+    'channel_label': '#666666',
+    'meter_bg': '#0a0a0a',
+
+    # Transport controls
+    'button_bg': '#3a3a3a',
+    'button_active': '#4a4a4a',
+    'button_hover': '#4a4a4a',
 }
+
+
+class MixerFader(tk.Canvas):
+    """Custom mixer-style fader widget."""
+
+    def __init__(self, parent, variable: tk.DoubleVar, from_: float = 0.0,
+                 to: float = 1.0, width: int = 60, height: int = 150,
+                 orientation: str = 'vertical', color: str = None,
+                 on_release: callable = None, on_press: callable = None, **kwargs):
+        """Initialize mixer fader.
+
+        Args:
+            parent: Parent widget
+            variable: Tkinter variable to bind
+            from_: Minimum value
+            to: Maximum value
+            width: Widget width
+            height: Widget height
+            orientation: 'vertical' or 'horizontal'
+            color: Accent color
+            on_release: Callback when slider is released
+            on_press: Callback when slider is pressed
+        """
+        super().__init__(parent, width=width, height=height,
+                         bg=COLORS['bg'], highlightthickness=0, **kwargs)
+
+        self.variable = variable
+        self.from_ = from_
+        self.to = to
+        self.width = width
+        self.height = height
+        self.orientation = orientation
+        self.color = color or COLORS['accent']
+        self.on_release = on_release
+        self.on_press = on_press
+        self.isDragging = False
+
+        # Fader dimensions
+        self.track_width = 8
+        self.thumb_width = 30
+        self.thumb_height = 12
+        self.led_count = 10
+
+        # Calculate track bounds
+        if orientation == 'vertical':
+            self.track_x = (width - self.track_width) // 2
+            self.track_top = 20
+            self.track_bottom = height - 20
+            self.track_height = self.track_bottom - self.track_top
+        else:
+            self.track_y = (height - self.track_width) // 2
+            self.track_left = 20
+            self.track_right = width - 20
+            self.track_width_actual = self.track_right - self.track_left
+
+        # Draw initial state
+        self._draw()
+
+        # Bind events
+        self.bind('<ButtonPress-1>', self._on_press)
+        self.bind('<B1-Motion>', self._on_drag)
+        self.bind('<ButtonRelease-1>', self._on_release)
+
+    def _value_to_position(self, value: float) -> float:
+        """Convert value to pixel position."""
+        if self.orientation == 'vertical':
+            # Invert for vertical (top = max, bottom = min)
+            normalized = (value - self.from_) / (self.to - self.from_)
+            return self.track_bottom - (normalized * self.track_height)
+        else:
+            normalized = (value - self.from_) / (self.to - self.from_)
+            return self.track_left + (normalized * self.track_width_actual)
+
+    def _position_to_value(self, pos: float) -> float:
+        """Convert pixel position to value."""
+        if self.orientation == 'vertical':
+            normalized = (self.track_bottom - pos) / self.track_height
+        else:
+            normalized = (pos - self.track_left) / self.track_width_actual
+        normalized = max(0.0, min(1.0, normalized))
+        return self.from_ + (normalized * (self.to - self.from_))
+
+    def _draw(self):
+        """Draw the fader."""
+        self.delete('all')
+
+        if self.orientation == 'vertical':
+            self._draw_vertical()
+        else:
+            self._draw_horizontal()
+
+    def _draw_vertical(self):
+        """Draw vertical fader with professional mixer styling."""
+        # Draw LED meter on the right side
+        led_x = self.track_x + self.track_width + 8
+        value_ratio = (self.variable.get() - self.from_) / (self.to - self.from_)
+
+        for i in range(self.led_count):
+            led_y = self.track_top + (i * self.track_height / self.led_count)
+            led_h = self.track_height / self.led_count - 2
+
+            # Determine LED color based on level
+            if i / self.led_count > value_ratio:
+                color = COLORS['led_off']
+            elif i < 6:
+                color = COLORS['led_green']
+            elif i < 8:
+                color = COLORS['led_yellow']
+            else:
+                color = COLORS['led_red']
+
+            self.create_rectangle(led_x, led_y, led_x + 6, led_y + led_h,
+                                fill=color, outline='#0a0a0a', width=1)
+
+        # Draw track background with metallic look
+        self.create_rectangle(
+            self.track_x - 1, self.track_top - 1,
+            self.track_x + self.track_width + 1, self.track_bottom + 1,
+            fill='#0a0a0a', outline='#111111'
+        )
+
+        # Draw track groove with depth effect
+        self.create_rectangle(
+            self.track_x, self.track_top,
+            self.track_x + self.track_width, self.track_bottom,
+            fill=COLORS['fader_track'], outline=COLORS['fader_groove']
+        )
+
+        # Draw center line
+        center_y = self.track_top + self.track_height // 2
+        self.create_line(
+            self.track_x + 1, center_y,
+            self.track_x + self.track_width - 1, center_y,
+            fill=COLORS['fader_groove'], width=1
+        )
+
+        # Draw groove marks
+        for i in range(21):
+            y = self.track_top + (i * self.track_height / 20)
+            self.create_line(
+                self.track_x + 1, y,
+                self.track_x + self.track_width - 1, y,
+                fill=COLORS['fader_groove'] if i % 5 != 0 else COLORS['channel_border']
+            )
+
+        # Calculate thumb position
+        thumb_pos = self._value_to_position(self.variable.get())
+        thumb_x = self.track_x + self.track_width // 2 - self.thumb_width // 2
+        thumb_y = thumb_pos - self.thumb_height // 2
+
+        # Draw thumb shadow
+        self.create_rectangle(
+            thumb_x + 1, thumb_y + 1,
+            thumb_x + self.thumb_width + 1, thumb_y + self.thumb_height + 1,
+            fill='#000000', outline=''
+        )
+
+        # Draw thumb body with metallic gradient effect
+        thumb_color = COLORS['fader_thumb_active'] if self.isDragging else COLORS['fader_thumb']
+        self.create_rectangle(
+            thumb_x, thumb_y,
+            thumb_x + self.thumb_width, thumb_y + self.thumb_height,
+            fill=thumb_color, outline=COLORS['fader_thumb_edge'], width=1
+        )
+
+        # Draw thumb highlight (top edge)
+        self.create_line(
+            thumb_x + 1, thumb_y + 1,
+            thumb_x + self.thumb_width - 1, thumb_y + 1,
+            fill='#666666'
+        )
+
+        # Draw thumb grip lines (concave groove effect)
+        grip_y_center = thumb_y + self.thumb_height // 2
+        for offset in [-3, -1, 1, 3]:
+            self.create_line(
+                thumb_x + 4, grip_y_center + offset,
+                thumb_x + self.thumb_width - 4, grip_y_center + offset,
+                fill='#333333'
+            )
+
+    def _draw_horizontal(self):
+        """Draw horizontal fader."""
+        # Draw track background
+        self.create_rectangle(
+            self.track_left, self.track_y,
+            self.track_right, self.track_y + self.track_width,
+            fill=COLORS['fader_track'], outline=COLORS['fader_groove']
+        )
+
+        # Draw track groove lines
+        for i in range(11):
+            x = self.track_left + (i * self.track_width_actual / 10)
+            self.create_line(
+                x, self.track_y + 2,
+                x, self.track_y + self.track_width - 2,
+                fill=COLORS['fader_groove']
+            )
+
+        # Calculate thumb position
+        thumb_pos = self._value_to_position(self.variable.get())
+        thumb_x = thumb_pos - self.thumb_height // 2
+        thumb_y = self.track_y + self.track_width // 2 - self.thumb_width // 2
+
+        # Draw thumb shadow
+        self.create_rectangle(
+            thumb_x + 2, thumb_y + 2,
+            thumb_x + self.thumb_height + 2, thumb_y + self.thumb_width + 2,
+            fill='#1a1a1a', outline=''
+        )
+
+        # Draw thumb body
+        thumb_color = COLORS['fader_thumb_active'] if self.isDragging else COLORS['fader_thumb']
+        self.create_rectangle(
+            thumb_x, thumb_y,
+            thumb_x + self.thumb_height, thumb_y + self.thumb_width,
+            fill=thumb_color, outline='#555555', width=1
+        )
+
+        # Draw thumb grip lines
+        grip_x_center = thumb_x + self.thumb_height // 2
+        for offset in [-2, 0, 2]:
+            self.create_line(
+                grip_x_center + offset, thumb_y + 5,
+                grip_x_center + offset, thumb_y + self.thumb_width - 5,
+                fill='#444444'
+            )
+
+    def _on_press(self, event):
+        """Handle mouse press."""
+        self.isDragging = True
+        if self.on_press:
+            self.on_press()
+        self._update_value(event)
+        self._draw()
+
+    def _on_drag(self, event):
+        """Handle mouse drag."""
+        if self.isDragging:
+            self._update_value(event)
+            self._draw()
+
+    def _on_release(self, event):
+        """Handle mouse release."""
+        self.isDragging = False
+        self._update_value(event)
+        self._draw()
+        if self.on_release:
+            self.on_release()
+
+    def _update_value(self, event):
+        """Update value from mouse position."""
+        if self.orientation == 'vertical':
+            value = self._position_to_value(event.y)
+        else:
+            value = self._position_to_value(event.x)
+        self.variable.set(round(value, 2))
+
+    def set_value(self, value: float):
+        """Set fader value programmatically."""
+        self.variable.set(value)
+        self._draw()
 
 
 class VoiceFilterGUI:
@@ -555,6 +852,9 @@ class VoiceFilterGUI:
         file_menu.add_command(label="Open Audio", command=self._open_audio)
         file_menu.add_command(label="Save Modified", command=self._save_modified)
         file_menu.add_separator()
+        file_menu.add_command(label="Save Preset", command=self._save_preset)
+        file_menu.add_command(label="Load Preset", command=self._load_preset)
+        file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._exit_app)
 
         edit_menu = tk.Menu(menubar, tearoff=0, bg=COLORS['bg'], fg=COLORS['fg'])
@@ -591,20 +891,42 @@ class VoiceFilterGUI:
                         variable=self.auto_preview_var).pack(side=tk.RIGHT, padx=10)
 
     def _create_waveform(self, parent: ttk.Frame) -> None:
-        """Create waveform visualization."""
-        waveform = ttk.LabelFrame(parent, text="Waveform", padding="5")
-        waveform.pack(fill=tk.X, pady=(0, 5))
+        """Create waveform visualization with mixer console styling."""
+        waveform = tk.Frame(parent, bg=COLORS['channel_bg'],
+                          highlightbackground=COLORS['channel_border'],
+                          highlightthickness=1)
+        waveform.pack(fill=tk.X, pady=(0, 5), padx=2)
 
-        ttk.Label(waveform, text="Original:", foreground=COLORS['success']).pack(anchor=tk.W)
-        self.waveform_canvas = tk.Canvas(waveform, bg="black", height=60)
-        self.waveform_canvas.pack(fill=tk.X, pady=(0, 5))
+        # Header
+        tk.Label(waveform, text="WAVEFORM DISPLAY", font=('', 9, 'bold'),
+                fg=COLORS['fg_dim'], bg=COLORS['channel_bg']).pack(anchor=tk.W, padx=10, pady=(5, 2))
 
-        ttk.Label(waveform, text="Modified:", foreground=COLORS['warning']).pack(anchor=tk.W)
-        self.modified_canvas = tk.Canvas(waveform, bg="black", height=60)
-        self.modified_canvas.pack(fill=tk.X)
+        # Original waveform
+        orig_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
+        orig_frame.pack(fill=tk.X, padx=10, pady=2)
+        tk.Label(orig_frame, text="ORIGINAL", font=('', 8, 'bold'),
+                fg=COLORS['success'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
 
-        self.waveform_info = ttk.Label(waveform, text="No audio loaded")
-        self.waveform_info.pack(fill=tk.X, pady=(5, 0))
+        self.waveform_canvas = tk.Canvas(orig_frame, bg=COLORS['meter_bg'], height=50,
+                                        highlightbackground=COLORS['channel_border'],
+                                        highlightthickness=1)
+        self.waveform_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+
+        # Modified waveform
+        mod_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
+        mod_frame.pack(fill=tk.X, padx=10, pady=2)
+        tk.Label(mod_frame, text="MODIFIED", font=('', 8, 'bold'),
+                fg=COLORS['warning'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
+
+        self.modified_canvas = tk.Canvas(mod_frame, bg=COLORS['meter_bg'], height=50,
+                                        highlightbackground=COLORS['channel_border'],
+                                        highlightthickness=1)
+        self.modified_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+
+        # Info label
+        self.waveform_info = tk.Label(waveform, text="No audio loaded",
+                                     font=('', 8), fg=COLORS['fg_dim'], bg=COLORS['channel_bg'])
+        self.waveform_info.pack(anchor=tk.W, padx=10, pady=(2, 5))
 
     def _create_params_notebook(self, parent: ttk.Frame) -> None:
         """Create parameter tabs."""
@@ -629,27 +951,31 @@ class VoiceFilterGUI:
 
     def _create_slider(self, parent: ttk.Frame, row: int, label: str,
                        variable: tk.DoubleVar, from_: float, to: float,
-                       unit: str = "", color: str = None) -> ttk.Scale:
-        """Create a labeled slider with value display."""
-        lbl = ttk.Label(parent, text=label, foreground=color) if color else ttk.Label(parent, text=label)
-        lbl.grid(row=row, column=0, sticky=tk.W, pady=2)
+                       unit: str = "", color: str = None) -> MixerFader:
+        """Create a mixer-style fader with value display."""
+        # Mixer fader
+        fader = MixerFader(
+            parent,
+            variable=variable,
+            from_=from_,
+            to=to,
+            width=60,
+            height=120,
+            orientation='vertical',
+            color=color,
+            on_press=lambda: self._stop_audio(),
+            on_release=lambda: self._on_slider_release()
+        )
+        fader.pack(pady=(0, 5))
 
-        scale = ttk.Scale(parent, from_=from_, to=to, variable=variable,
-                          orient=tk.HORIZONTAL, length=150)
-        scale.grid(row=row, column=1, sticky=tk.EW, padx=(5, 0), pady=2)
-
-        value_label = ttk.Label(parent, text=f"{variable.get():.1f}{unit}")
-        value_label.grid(row=row, column=2, padx=(5, 0))
+        # Value label
+        value_label = ttk.Label(parent, text=f"{variable.get():.1f}{unit}", width=8)
+        value_label.pack()
 
         variable.trace_add('write', lambda *args, lbl=value_label, v=variable, u=unit:
                           lbl.configure(text=f"{v.get():.1f}{u}"))
 
-        # Bind ButtonPress to stop audio immediately
-        scale.bind('<ButtonPress-1>', lambda e: self._stop_audio())
-        # Bind ButtonRelease to trigger auto-preview
-        scale.bind('<ButtonRelease-1>', lambda e: self._on_slider_release())
-
-        return scale
+        return fader
 
     def _on_slider_release(self) -> None:
         """Handle slider release for auto-preview."""
@@ -658,116 +984,331 @@ class VoiceFilterGUI:
             self._play_modified()
 
     def _create_basic_tab(self, parent: ttk.Frame) -> None:
-        """Create basic parameters tab."""
-        inner = ttk.Frame(parent)
+        """Create basic parameters tab with mixer-style faders."""
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Basic Controls", font=('', 10, 'bold'),
-                  foreground=COLORS['basic']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="BASIC", font=('', 10, 'bold'),
+                  foreground=COLORS['basic'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Volume:", self.volume_var, 0, 2, "%", COLORS['basic'])
-        self._create_slider(inner, 2, "Pitch:", self.pitch_var, -12, 12, " st", COLORS['basic'])
-        self._create_slider(inner, 3, "Speed:", self.speed_var, 0.5, 2, "x", COLORS['basic'])
-        inner.columnconfigure(1, weight=1)
+        # Create fader frame with channel strip look
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # Fader definitions
+        faders = [
+            ("VOL", self.volume_var, 0, 2, "%"),
+            ("PITCH", self.pitch_var, -12, 12, " st"),
+            ("SPEED", self.speed_var, 0.5, 2, "x"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(faders):
+            # Channel strip frame
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=3, pady=5, sticky='nsew')
+
+            # Channel label
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+
+            # Fader
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['basic'])
+
+            # Value display
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f}{unit}",
+                    font=('', 8), fg=COLORS['led_green'], bg=COLORS['meter_bg']).pack(expand=True)
+
+            # Update value display
+            def update_val(v=var, lbl=None, u=unit):
+                if lbl and lbl.winfo_exists():
+                    lbl.configure(text=f"{v.get():.1f}{u}")
+            var.trace_add('write', lambda *args, v=var, u=unit: self.root.after(10, update_val, v, None, u))
+
+        fader_grid.columnconfigure(0, weight=1)
+        fader_grid.columnconfigure(1, weight=1)
+        fader_grid.columnconfigure(2, weight=1)
 
     def _create_eq_tab(self, parent: ttk.Frame) -> None:
         """Create EQ parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="5-Band Equalizer", font=('', 10, 'bold'),
-                  foreground=COLORS['eq']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="EQUALIZER", font=('', 10, 'bold'),
+                  foreground=COLORS['eq'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Bass (100 Hz):", self.eq_bass_var, -12, 12, " dB", COLORS['eq'])
-        self._create_slider(inner, 2, "Low Mid (400 Hz):", self.eq_low_mid_var, -12, 12, " dB", COLORS['eq'])
-        self._create_slider(inner, 3, "Mid (1 kHz):", self.eq_mid_var, -12, 12, " dB", COLORS['eq'])
-        self._create_slider(inner, 4, "High Mid (2.5 kHz):", self.eq_high_mid_var, -12, 12, " dB", COLORS['eq'])
-        self._create_slider(inner, 5, "Treble (6 kHz):", self.eq_treble_var, -12, 12, " dB", COLORS['eq'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        eq_faders = [
+            ("BASS\n100Hz", self.eq_bass_var),
+            ("LOW\n400Hz", self.eq_low_mid_var),
+            ("MID\n1kHz", self.eq_mid_var),
+            ("HIGH\n2.5kHz", self.eq_high_mid_var),
+            ("TREBLE\n6kHz", self.eq_treble_var),
+        ]
+
+        for col, (label_text, var) in enumerate(eq_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=3, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 8, 'bold'),
+                    fg=COLORS['eq'], bg=COLORS['channel_bg'], justify=tk.CENTER).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, -12, 12, " dB", COLORS['eq'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f} dB",
+                    font=('', 8), fg=COLORS['eq'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        for i in range(5):
+            fader_grid.columnconfigure(i, weight=1)
 
     def _create_filters_tab(self, parent: ttk.Frame) -> None:
         """Create filters parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Frequency Filters", font=('', 10, 'bold'),
-                  foreground=COLORS['eq']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="FILTERS", font=('', 10, 'bold'),
+                  foreground=COLORS['eq'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Low Pass:", self.low_pass_var, 100, 20000, " Hz", COLORS['eq'])
-        self._create_slider(inner, 2, "High Pass:", self.high_pass_var, 20, 5000, " Hz", COLORS['eq'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        filter_faders = [
+            ("LOW\nPASS", self.low_pass_var, 100, 20000, " Hz"),
+            ("HIGH\nPASS", self.high_pass_var, 20, 5000, " Hz"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(filter_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=15, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['eq'], bg=COLORS['channel_bg'], justify=tk.CENTER).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['eq'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.0f}{unit}",
+                    font=('', 8), fg=COLORS['eq'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        fader_grid.columnconfigure(0, weight=1)
+        fader_grid.columnconfigure(1, weight=1)
 
     def _create_modulation_tab(self, parent: ttk.Frame) -> None:
         """Create modulation parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Modulation Effects", font=('', 10, 'bold'),
-                  foreground=COLORS['modulation']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="MODULATION", font=('', 10, 'bold'),
+                  foreground=COLORS['modulation'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Chorus:", self.chorus_var, 0, 1, "", COLORS['modulation'])
-        self._create_slider(inner, 2, "Flanger:", self.flanger_var, 0, 1, "", COLORS['modulation'])
-        self._create_slider(inner, 3, "Phaser:", self.phaser_var, 0, 1, "", COLORS['modulation'])
-        self._create_slider(inner, 4, "Tremolo:", self.tremolo_var, 0, 1, "", COLORS['modulation'])
-        self._create_slider(inner, 5, "Vibrato:", self.vibrato_var, 0, 1, "", COLORS['modulation'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        mod_faders = [
+            ("CHORUS", self.chorus_var),
+            ("FLANGER", self.flanger_var),
+            ("PHASER", self.phaser_var),
+            ("TREMOLO", self.tremolo_var),
+            ("VIBRATO", self.vibrato_var),
+        ]
+
+        for col, (label_text, var) in enumerate(mod_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=3, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['modulation'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, 0, 1, "", COLORS['modulation'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.0%}",
+                    font=('', 8), fg=COLORS['modulation'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        for i in range(5):
+            fader_grid.columnconfigure(i, weight=1)
 
     def _create_distortion_tab(self, parent: ttk.Frame) -> None:
         """Create distortion parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Distortion Effects", font=('', 10, 'bold'),
-                  foreground=COLORS['distortion']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="DISTORTION", font=('', 10, 'bold'),
+                  foreground=COLORS['distortion'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Distortion:", self.distortion_var, 0, 1, "", COLORS['distortion'])
-        self._create_slider(inner, 2, "Bitcrusher:", self.bitcrusher_var, 4, 32, " bits", COLORS['distortion'])
-        self._create_slider(inner, 3, "Overdrive:", self.overdrive_var, 1, 10, "x", COLORS['distortion'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        dist_faders = [
+            ("DIST", self.distortion_var, 0, 1, ""),
+            ("BITS", self.bitcrusher_var, 4, 32, " bit"),
+            ("DRIVE", self.overdrive_var, 1, 10, "x"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(dist_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=15, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['distortion'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['distortion'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f}{unit}",
+                    font=('', 8), fg=COLORS['distortion'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        fader_grid.columnconfigure(0, weight=1)
+        fader_grid.columnconfigure(1, weight=1)
+        fader_grid.columnconfigure(2, weight=1)
 
     def _create_time_tab(self, parent: ttk.Frame) -> None:
         """Create time-based parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Time-Based Effects", font=('', 10, 'bold'),
-                  foreground=COLORS['time']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="TIME EFFECTS", font=('', 10, 'bold'),
+                  foreground=COLORS['time'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Reverb:", self.reverb_var, 0, 1, "", COLORS['time'])
-        self._create_slider(inner, 2, "Delay:", self.delay_var, 0, 500, " ms", COLORS['time'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        time_faders = [
+            ("REVERB", self.reverb_var, 0, 1, ""),
+            ("DELAY", self.delay_var, 0, 500, " ms"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(time_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=15, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['time'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['time'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f}{unit}",
+                    font=('', 8), fg=COLORS['time'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        fader_grid.columnconfigure(0, weight=1)
+        fader_grid.columnconfigure(1, weight=1)
 
     def _create_dynamics_tab(self, parent: ttk.Frame) -> None:
         """Create dynamics parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Dynamics Processing", font=('', 10, 'bold'),
-                  foreground=COLORS['dynamics']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="DYNAMICS", font=('', 10, 'bold'),
+                  foreground=COLORS['dynamics'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Comp Threshold:", self.comp_threshold_var, -40, 0, " dB", COLORS['dynamics'])
-        self._create_slider(inner, 2, "Comp Ratio:", self.comp_ratio_var, 1, 20, ":1", COLORS['dynamics'])
-        self._create_slider(inner, 3, "Gate:", self.gate_var, -60, 0, " dB", COLORS['dynamics'])
-        inner.columnconfigure(1, weight=1)
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        dyn_faders = [
+            ("THRESH", self.comp_threshold_var, -40, 0, " dB"),
+            ("RATIO", self.comp_ratio_var, 1, 20, ":1"),
+            ("GATE", self.gate_var, -60, 0, " dB"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(dyn_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=15, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 9, 'bold'),
+                    fg=COLORS['dynamics'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['dynamics'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f}{unit}",
+                    font=('', 8), fg=COLORS['dynamics'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        fader_grid.columnconfigure(0, weight=1)
+        fader_grid.columnconfigure(1, weight=1)
+        fader_grid.columnconfigure(2, weight=1)
 
     def _create_utility_tab(self, parent: ttk.Frame) -> None:
         """Create utility parameters tab."""
-        inner = ttk.Frame(parent)
+        inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
-        ttk.Label(inner, text="Utility Functions", font=('', 10, 'bold'),
-                  foreground=COLORS['utility']).grid(row=0, column=0, columnspan=3, sticky=tk.W, pady=(0, 5))
+        ttk.Label(inner, text="UTILITY", font=('', 10, 'bold'),
+                  foreground=COLORS['utility'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        self._create_slider(inner, 1, "Fade In:", self.fade_in_var, 0, 5000, " ms", COLORS['utility'])
-        self._create_slider(inner, 2, "Fade Out:", self.fade_out_var, 0, 5000, " ms", COLORS['utility'])
-        self._create_slider(inner, 3, "Normalize:", self.normalize_var, -24, 0, " dB", COLORS['utility'])
-        self._create_slider(inner, 4, "Trim Start:", self.trim_start_var, 0, 100, " s", COLORS['utility'])
-        self._create_slider(inner, 5, "Trim End:", self.trim_end_var, 0, 100, " s", COLORS['utility'])
+        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
+        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        reverse_cb = ttk.Checkbutton(inner, text="Reverse Audio",
-                        variable=self.reverse_var,
-                        command=self._on_reverse_change)
-        reverse_cb.grid(row=6, column=0, columnspan=3, sticky=tk.W, pady=5)
+        util_faders = [
+            ("FADE\nIN", self.fade_in_var, 0, 5000, " ms"),
+            ("FADE\nOUT", self.fade_out_var, 0, 5000, " ms"),
+            ("NORM", self.normalize_var, -24, 0, " dB"),
+            ("TRIM\nSTART", self.trim_start_var, 0, 100, " s"),
+            ("TRIM\nEND", self.trim_end_var, 0, 100, " s"),
+        ]
+
+        for col, (label_text, var, from_, to, unit) in enumerate(util_faders):
+            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            channel.grid(row=0, column=col, padx=3, pady=5, sticky='nsew')
+
+            tk.Label(channel, text=label_text, font=('', 8, 'bold'),
+                    fg=COLORS['utility'], bg=COLORS['channel_bg'], justify=tk.CENTER).pack(pady=(8, 2))
+
+            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['utility'])
+
+            val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
+            val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+            val_frame.pack_propagate(False)
+            tk.Label(val_frame, text=f"{var.get():.1f}{unit}",
+                    font=('', 8), fg=COLORS['utility'], bg=COLORS['meter_bg']).pack(expand=True)
+
+        for i in range(5):
+            fader_grid.columnconfigure(i, weight=1)
+
+        # Reverse checkbox
+        reverse_frame = tk.Frame(inner, bg=COLORS['channel_bg'])
+        reverse_frame.pack(fill=tk.X, pady=10, padx=10)
+        reverse_cb = tk.Checkbutton(reverse_frame, text="REVERSE",
+                                   variable=self.reverse_var,
+                                   command=self._on_reverse_change,
+                                   bg=COLORS['channel_bg'], fg=COLORS['utility'],
+                                   selectcolor=COLORS['meter_bg'],
+                                   activebackground=COLORS['channel_bg'],
+                                   activeforeground=COLORS['utility'])
+        reverse_cb.pack(side=tk.LEFT)
         reverse_cb.bind('<ButtonPress-1>', lambda e: self._stop_audio())
         inner.columnconfigure(1, weight=1)
 
@@ -865,6 +1406,94 @@ class VoiceFilterGUI:
                 self._log(f"Modified saved to: {os.path.basename(filepath)}")
             else:
                 messagebox.showerror("Error", "Failed to save modified audio")
+
+    def _save_preset(self) -> None:
+        """Save current mixer settings to a preset file."""
+        import json
+        params = self._get_params()
+        params['trim_end'] = self.processor.duration if self.processor.duration else 0
+        params['version'] = '1.0'
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("Preset files", "*.preset"), ("All files", "*.*")],
+            initialfile="mixer_preset.json"
+        )
+        if filepath:
+            try:
+                with open(filepath, 'w') as f:
+                    json.dump(params, f, indent=2)
+                self._log(f"Preset saved: {os.path.basename(filepath)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save preset:\n{e}")
+
+    def _load_preset(self) -> None:
+        """Load mixer settings from a preset file."""
+        import json
+        filepath = filedialog.askopenfilename(
+            filetypes=[
+                ("JSON files", "*.json"),
+                ("Preset files", "*.preset"),
+                ("All files", "*.*"),
+            ]
+        )
+        if filepath:
+            try:
+                with open(filepath, 'r') as f:
+                    params = json.load(f)
+                self._apply_preset(params)
+                self._draw_modified_waveform()
+                self._log(f"Preset loaded: {os.path.basename(filepath)}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to load preset:\n{e}")
+
+    def _apply_preset(self, params: dict) -> None:
+        """Apply preset parameters to all controls."""
+        # Basic
+        self.volume_var.set(params.get('volume', 1.0))
+        self.pitch_var.set(params.get('pitch', 0.0))
+        self.speed_var.set(params.get('speed', 1.0))
+
+        # EQ
+        eq = params.get('eq', {})
+        self.eq_bass_var.set(eq.get('bass', 0.0))
+        self.eq_low_mid_var.set(eq.get('low_mid', 0.0))
+        self.eq_mid_var.set(eq.get('mid', 0.0))
+        self.eq_high_mid_var.set(eq.get('high_mid', 0.0))
+        self.eq_treble_var.set(eq.get('treble', 0.0))
+
+        # Filters
+        self.low_pass_var.set(params.get('low_pass', 20000))
+        self.high_pass_var.set(params.get('high_pass', 20))
+
+        # Modulation
+        self.chorus_var.set(params.get('chorus', 0.0))
+        self.flanger_var.set(params.get('flanger', 0.0))
+        self.phaser_var.set(params.get('phaser', 0.0))
+        self.tremolo_var.set(params.get('tremolo', 0.0))
+        self.vibrato_var.set(params.get('vibrato', 0.0))
+
+        # Distortion
+        self.distortion_var.set(params.get('distortion', 0.0))
+        self.bitcrusher_var.set(params.get('bitcrusher', 32))
+        self.overdrive_var.set(params.get('overdrive', 1.0))
+
+        # Time-based
+        self.reverb_var.set(params.get('reverb', 0.0))
+        self.delay_var.set(params.get('delay', 0.0))
+
+        # Dynamics
+        self.comp_threshold_var.set(params.get('comp_threshold', -20.0))
+        self.comp_ratio_var.set(params.get('comp_ratio', 4.0))
+        self.gate_var.set(params.get('gate', -30.0))
+
+        # Utility
+        self.fade_in_var.set(params.get('fade_in', 0.0))
+        self.fade_out_var.set(params.get('fade_out', 0.0))
+        self.normalize_var.set(params.get('normalize', 0.0))
+        self.trim_start_var.set(params.get('trim_start', 0.0))
+        self.trim_end_var.set(params.get('trim_end', self.processor.duration if self.processor.duration else 0))
+        self.reverse_var.set(params.get('reverse', False))
 
     def _play_original(self) -> None:
         """Play original audio."""
