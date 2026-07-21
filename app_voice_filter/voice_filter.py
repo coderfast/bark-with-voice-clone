@@ -529,7 +529,7 @@ class MixerFader(tk.Canvas):
             on_press: Callback when slider is pressed
         """
         super().__init__(parent, width=width, height=height,
-                         bg=COLORS['bg'], highlightthickness=0, **kwargs)
+                         bg=COLORS['channel_bg'], highlightthickness=0, **kwargs)
 
         self.variable = variable
         self.from_ = from_
@@ -541,6 +541,7 @@ class MixerFader(tk.Canvas):
         self.on_release = on_release
         self.on_press = on_press
         self.isDragging = False
+        self.audio_level = 0.0  # External audio level for animation
 
         # Fader dimensions
         self.track_width = 8
@@ -567,6 +568,11 @@ class MixerFader(tk.Canvas):
         self.bind('<ButtonPress-1>', self._on_press)
         self.bind('<B1-Motion>', self._on_drag)
         self.bind('<ButtonRelease-1>', self._on_release)
+
+    def set_audio_level(self, level: float) -> None:
+        """Set audio level for meter animation (0.0 to 1.0)."""
+        self.audio_level = max(0.0, min(1.0, level))
+        self._draw()
 
     def _value_to_position(self, value: float) -> float:
         """Convert value to pixel position."""
@@ -598,16 +604,15 @@ class MixerFader(tk.Canvas):
 
     def _draw_vertical(self):
         """Draw vertical fader with professional mixer styling."""
-        # Draw LED meter on the right side
+        # Draw LED meter on the right side (uses audio_level for animation)
         led_x = self.track_x + self.track_width + 8
-        value_ratio = (self.variable.get() - self.from_) / (self.to - self.from_)
 
         for i in range(self.led_count):
             led_y = self.track_top + (i * self.track_height / self.led_count)
             led_h = self.track_height / self.led_count - 2
 
-            # Determine LED color based on level
-            if i / self.led_count > value_ratio:
+            # Determine LED color based on audio level
+            if i / self.led_count > self.audio_level:
                 color = COLORS['led_off']
             elif i < 6:
                 color = COLORS['led_green']
@@ -769,6 +774,166 @@ class MixerFader(tk.Canvas):
         self._draw()
 
 
+class AnalogVUMeter(tk.Canvas):
+    """Analog VU meter with realistic needle bounce physics."""
+
+    def __init__(self, parent, width: int = 140, height: int = 100,
+                 color: str = None, **kwargs):
+        super().__init__(parent, width=width, height=height,
+                         bg=COLORS['meter_bg'], highlightthickness=0, **kwargs)
+
+        self.width = width
+        self.height = height
+        self.color = color or COLORS['accent']
+
+        self.target_level = 0.0
+        self.current_level = 0.0
+        self.needle_velocity = 0.0
+
+        self.attack_speed = 0.2
+        self.decay_speed = 0.04
+        self.damping = 0.82
+        self.spring_constant = 0.35
+
+        self.center_x = width // 2
+        self.center_y = height // 2 + 5
+        self.radius = min(width, height) // 2 - 12
+
+        self.start_angle = 225
+        self.end_angle = 315
+        self.angle_range = self.end_angle - self.start_angle
+
+        self.needle_length = self.radius - 8
+
+        self.isAnimating = False
+        self.animation_id = None
+
+        self._draw()
+
+    def set_level(self, level):
+        """Set VU meter target level and start animation."""
+        self.target_level = max(0.0, min(1.0, level))
+        # Always start animation to move needle toward target
+        if not self.isAnimating:
+            self._start_animation()
+
+    def _start_animation(self):
+        self.isAnimating = True
+        self._animate_needle()
+
+    def _stop_animation(self):
+        self.isAnimating = False
+        if self.animation_id is not None:
+            self.after_cancel(self.animation_id)
+            self.animation_id = None
+
+    def _animate_needle(self):
+        if not self.isAnimating:
+            return
+
+        error = self.target_level - self.current_level
+        spring_force = error * self.spring_constant
+
+        if error > 0:
+            self.needle_velocity += spring_force * self.attack_speed
+        else:
+            self.needle_velocity += spring_force * self.decay_speed
+
+        self.needle_velocity *= self.damping
+        self.current_level += self.needle_velocity
+        self.current_level = max(0.0, min(1.0, self.current_level))
+
+        self._draw()
+
+        if abs(self.needle_velocity) > 0.001 or abs(error) > 0.01:
+            self.animation_id = self.after(16, self._animate_needle)
+        else:
+            self.isAnimating = False
+
+    def _draw(self):
+        self.delete('all')
+
+        self.create_oval(2, 2, self.width - 2, self.height - 2,
+                        fill=COLORS['fader_track'], outline='#222222', width=2)
+        self.create_oval(8, 8, self.width - 8, self.height - 8,
+                        fill='#0f0f0f', outline='#1a1a1a', width=1)
+
+        self._draw_colored_arc()
+        self._draw_tick_marks()
+        self._draw_labels()
+        self._draw_needle()
+
+        self.create_oval(self.center_x - 8, self.center_y - 8,
+                        self.center_x + 8, self.center_y + 8,
+                        fill='#2a2a2a', outline='#444444', width=2)
+        self.create_oval(self.center_x - 4, self.center_y - 4,
+                        self.center_x + 4, self.center_y + 4,
+                        fill='#555555', outline='#666666', width=1)
+
+    def _draw_colored_arc(self):
+        green_end = self.start_angle + self.angle_range * 0.7
+        self.create_arc(8, 8, self.width - 8, self.height - 8,
+                       start=self.start_angle, extent=green_end - self.start_angle,
+                       style='arc', outline=COLORS['led_green'], width=5)
+
+        yellow_end = self.start_angle + self.angle_range * 0.85
+        self.create_arc(8, 8, self.width - 8, self.height - 8,
+                       start=green_end, extent=yellow_end - green_end,
+                       style='arc', outline=COLORS['led_yellow'], width=5)
+
+        self.create_arc(8, 8, self.width - 8, self.height - 8,
+                       start=yellow_end, extent=self.end_angle - yellow_end,
+                       style='arc', outline=COLORS['led_red'], width=5)
+
+    def _draw_tick_marks(self):
+        for i in range(11):
+            angle = self.start_angle + (i / 10) * self.angle_range
+            angle_rad = np.radians(angle)
+            inner_r = self.radius - 5
+            outer_r = self.radius + 5
+            x1 = self.center_x + inner_r * np.cos(angle_rad)
+            y1 = self.center_y - inner_r * np.sin(angle_rad)
+            x2 = self.center_x + outer_r * np.cos(angle_rad)
+            y2 = self.center_y - outer_r * np.sin(angle_rad)
+            self.create_line(x1, y1, x2, y2, fill=COLORS['fg_dim'], width=1)
+
+    def _draw_labels(self):
+        labels = [-20, -10, -7, -5, -3, 0, +1, +2, +3]
+        self._db_min = labels[0]   # -20 dB at needle position 0.0
+        self._db_max = labels[-1]  # +3 dB at needle position 1.0
+        for i, db in enumerate(labels):
+            angle = self.start_angle + (i / (len(labels) - 1)) * self.angle_range
+            angle_rad = np.radians(angle)
+            label_r = self.radius + 14
+            x = self.center_x + label_r * np.cos(angle_rad)
+            y = self.center_y - label_r * np.sin(angle_rad)
+            color = COLORS['led_green'] if db < 0 else COLORS['led_yellow'] if db < 2 else COLORS['led_red']
+            self.create_text(x, y, text=str(db), fill=color, font=('', 7))
+
+    def _draw_needle(self):
+        """Draw needle with glow effect."""
+        angle = self.start_angle + self.current_level * self.angle_range
+        angle_rad = np.radians(angle)
+        tip_x = self.center_x + self.needle_length * np.cos(angle_rad)
+        tip_y = self.center_y - self.needle_length * np.sin(angle_rad)
+
+        # Outer glow (large, dim)
+        self.create_line(self.center_x, self.center_y, tip_x, tip_y,
+                        fill='#440000', width=12, capstyle='round')
+        # Middle glow
+        self.create_line(self.center_x, self.center_y, tip_x, tip_y,
+                        fill='#661111', width=8, capstyle='round')
+        # Inner glow
+        self.create_line(self.center_x, self.center_y, tip_x, tip_y,
+                        fill='#882222', width=5, capstyle='round')
+        # Main needle body
+        self.create_line(self.center_x, self.center_y, tip_x, tip_y,
+                        fill='#ff2222', width=3, capstyle='round')
+        # Bright highlight
+        self.create_line(self.center_x, self.center_y, tip_x, tip_y,
+                        fill='#ff6666', width=1, capstyle='round')
+
+
 class VoiceFilterGUI:
     """Enhanced GUI application for Voice Filter."""
 
@@ -786,6 +951,14 @@ class VoiceFilterGUI:
 
         # Auto-preview
         self.auto_preview_var = tk.BooleanVar(value=False)
+
+        # Animation state
+        self.faders: list = []
+        self.isAnimating = False
+        self.animation_id = None
+        self.playback_position = 0
+        self.playback_audio = None
+        self.playback_sample_rate = None
 
         # Variables
         self._create_variables()
@@ -953,20 +1126,23 @@ class VoiceFilterGUI:
                        variable: tk.DoubleVar, from_: float, to: float,
                        unit: str = "", color: str = None) -> MixerFader:
         """Create a mixer-style fader with value display."""
-        # Mixer fader
+        # Mixer fader - medium width
         fader = MixerFader(
             parent,
             variable=variable,
             from_=from_,
             to=to,
-            width=60,
-            height=120,
+            width=65,
+            height=125,
             orientation='vertical',
             color=color,
             on_press=lambda: self._stop_audio(),
             on_release=lambda: self._on_slider_release()
         )
         fader.pack(pady=(0, 5))
+
+        # Add to faders list for animation
+        self.faders.append(fader)
 
         # Value label
         value_label = ttk.Label(parent, text=f"{variable.get():.1f}{unit}", width=8)
@@ -984,16 +1160,43 @@ class VoiceFilterGUI:
             self._play_modified()
 
     def _create_basic_tab(self, parent: ttk.Frame) -> None:
-        """Create basic parameters tab with mixer-style faders."""
+        """Create basic parameters tab with mixer-style faders and VU meter."""
         inner = tk.Frame(parent, bg=COLORS['channel_bg'])
         inner.pack(fill=tk.BOTH, expand=True)
 
         ttk.Label(inner, text="BASIC", font=('', 10, 'bold'),
                   foreground=COLORS['basic'], background=COLORS['channel_bg']).pack(anchor=tk.W, pady=(5, 10))
 
-        # Create fader frame with channel strip look
-        fader_grid = tk.Frame(inner, bg=COLORS['channel_bg'])
-        fader_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Main content frame using grid for equal-width columns
+        content_frame = tk.Frame(inner, bg=COLORS['channel_bg'])
+        content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+
+        # All 4 columns (VU + 3 faders) have equal width
+        for i in range(4):
+            content_frame.columnconfigure(i, weight=1, uniform='basic')
+
+        # VU Meter channel (column 0) - expand to fill column width
+        vu_channel = tk.Frame(content_frame, bg=COLORS['channel_bg'],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+        vu_channel.grid(row=0, column=0, padx=4, pady=5, sticky='nsew')
+
+        tk.Label(vu_channel, text="VU", font=('', 9, 'bold'),
+                fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(5, 2))
+
+        # VU meter container that expands to fill channel width
+        vu_meter_container = tk.Frame(vu_channel, bg=COLORS['channel_bg'])
+        vu_meter_container.pack(fill=tk.X, padx=5, pady=2)
+        self.vu_meter = AnalogVUMeter(vu_meter_container, width=120, height=120, color=COLORS['basic'])
+        self.vu_meter.pack(expand=True)
+
+        # VU Meter level display
+        vu_val_frame = tk.Frame(vu_channel, bg=COLORS['meter_bg'], height=18)
+        vu_val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+        vu_val_frame.pack_propagate(False)
+        self.vu_value_label = tk.Label(vu_val_frame, text="-60.0 dB",
+                                      font=('', 8), fg=COLORS['led_green'], bg=COLORS['meter_bg'])
+        self.vu_value_label.pack(expand=True)
 
         # Fader definitions
         faders = [
@@ -1003,18 +1206,33 @@ class VoiceFilterGUI:
         ]
 
         for col, (label_text, var, from_, to, unit) in enumerate(faders):
-            # Channel strip frame
-            channel = tk.Frame(fader_grid, bg=COLORS['channel_bg'],
+            # Channel strip frame - column 1, 2, 3 - expand to fill column width
+            channel = tk.Frame(content_frame, bg=COLORS['channel_bg'],
                              highlightbackground=COLORS['channel_border'],
                              highlightthickness=1)
-            channel.grid(row=0, column=col, padx=3, pady=5, sticky='nsew')
+            channel.grid(row=0, column=col + 1, padx=4, pady=5, sticky='nsew')
 
             # Channel label
             tk.Label(channel, text=label_text, font=('', 9, 'bold'),
-                    fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(8, 2))
+                    fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(5, 2))
 
-            # Fader
-            self._create_slider(channel, 0, "", var, from_, to, unit, COLORS['basic'])
+            # Fader - expand to fill channel width
+            fader_container = tk.Frame(channel, bg=COLORS['channel_bg'])
+            fader_container.pack(fill=tk.X, padx=5, pady=2)
+            fader = MixerFader(
+                fader_container,
+                variable=var,
+                from_=from_,
+                to=to,
+                width=65,
+                height=125,
+                orientation='vertical',
+                color=COLORS['basic'],
+                on_press=lambda: self._stop_audio(),
+                on_release=lambda: self._on_slider_release()
+            )
+            fader.pack(expand=True)
+            self.faders.append(fader)
 
             # Value display
             val_frame = tk.Frame(channel, bg=COLORS['meter_bg'], height=18)
@@ -1028,10 +1246,6 @@ class VoiceFilterGUI:
                 if lbl and lbl.winfo_exists():
                     lbl.configure(text=f"{v.get():.1f}{u}")
             var.trace_add('write', lambda *args, v=var, u=unit: self.root.after(10, update_val, v, None, u))
-
-        fader_grid.columnconfigure(0, weight=1)
-        fader_grid.columnconfigure(1, weight=1)
-        fader_grid.columnconfigure(2, weight=1)
 
     def _create_eq_tab(self, parent: ttk.Frame) -> None:
         """Create EQ parameters tab."""
@@ -1496,27 +1710,123 @@ class VoiceFilterGUI:
         self.reverse_var.set(params.get('reverse', False))
 
     def _play_original(self) -> None:
-        """Play original audio."""
+        """Play original audio with meter animation."""
         if self.processor.original_audio is None:
             messagebox.showwarning("Warning", "No audio loaded")
             return
         self._log("Playing original...")
+        self.playback_audio = self.processor.original_audio
+        self.playback_sample_rate = self.processor.sample_rate
+        self.playback_position = 0
+        self._start_animation()
         self.processor.play_audio(self.processor.original_audio,
-                                  callback=lambda: self.root.after(0, lambda: self._log("Playback finished")))
+                                  callback=lambda: self.root.after(0, self._on_playback_finished))
 
     def _play_modified(self) -> None:
-        """Play modified audio."""
+        """Play modified audio with meter animation."""
         if self.processor.original_audio is None:
             return
         processed = self.processor.apply_process_all(self._get_params())
         self._log("Playing modified...")
+        self.playback_audio = processed
+        self.playback_sample_rate = self.processor.sample_rate
+        self.playback_position = 0
+        self._start_animation()
         self.processor.play_audio(processed,
-                                  callback=lambda: self.root.after(0, lambda: self._log("Playback finished")))
+                                  callback=lambda: self.root.after(0, self._on_playback_finished))
 
     def _stop_audio(self) -> None:
-        """Stop audio playback."""
+        """Stop audio playback and animation."""
+        self._stop_animation()
         self.processor.stop_playback()
         self._log("Stopped")
+
+    def _on_playback_finished(self) -> None:
+        """Handle playback completion."""
+        self._stop_animation()
+        self._log("Playback finished")
+
+    def _start_animation(self) -> None:
+        """Start meter animation."""
+        self.isAnimating = True
+        self._animate_meters()
+
+    def _stop_animation(self) -> None:
+        """Stop meter animation and let needles fall to 0."""
+        self.isAnimating = False
+        self.playback_audio = None
+        if self.animation_id is not None:
+            self.root.after_cancel(self.animation_id)
+            self.animation_id = None
+        # Reset all fader levels to 0
+        for fader in self.faders:
+            fader.set_audio_level(0.0)
+        # Set VU meter target to 0 (needle will animate to -20 dB position)
+        if hasattr(self, 'vu_meter'):
+            self.vu_meter.set_level(0.0)
+        # Update VU label
+        if hasattr(self, 'vu_value_label') and self.vu_value_label.winfo_exists():
+            self.vu_value_label.configure(text="-20.0 dB")
+
+    def _animate_meters(self) -> None:
+        """Update meter levels based on audio position."""
+        if not self.isAnimating or self.playback_audio is None:
+            return
+
+        # Calculate current audio level (RMS of a small window)
+        window_size = 1024
+        start = int(self.playback_position)
+        end = min(start + window_size, len(self.playback_audio))
+
+        if start < len(self.playback_audio):
+            # Get audio window
+            audio_window = self.playback_audio[start:end]
+
+            # Calculate RMS level
+            rms = np.sqrt(np.mean(audio_window ** 2))
+
+            # Convert to dB
+            if rms > 0:
+                level_db = 20 * np.log10(rms)
+            else:
+                level_db = -60
+
+            # Map dB to needle position (0.0 to 1.0)
+            # VU meter scale: -20 dB at position 0.0, +3 dB at position 1.0
+            vu_db_min = self.vu_meter._db_min  # -20
+            vu_db_max = self.vu_meter._db_max  # +3
+            level = np.clip((level_db - vu_db_min) / (vu_db_max - vu_db_min), 0.0, 1.0)
+
+            # Update all faders with the audio level
+            for fader in self.faders:
+                fader.set_audio_level(level)
+
+            # Update VU meter
+            if hasattr(self, 'vu_meter'):
+                self.vu_meter.set_level(level)
+                # Update VU value label
+                if hasattr(self, 'vu_value_label') and self.vu_value_label.winfo_exists():
+                    self.vu_value_label.configure(text=f"{level_db:.1f} dB")
+
+            # Advance position (simulate real-time playback)
+            self.playback_position += self.playback_sample_rate // 30  # ~30fps
+
+            # Loop or stop
+            if self.playback_position >= len(self.playback_audio):
+                self.playback_position = 0  # Loop
+        else:
+            # Reset if we've gone past the end
+            self.playback_position = 0
+            for fader in self.faders:
+                fader.set_audio_level(0.0)
+            if hasattr(self, 'vu_meter'):
+                self.vu_meter.set_level(0.0)
+                if hasattr(self, 'vu_value_label') and self.vu_value_label.winfo_exists():
+                    self.vu_value_label.configure(text="-20.0 dB")
+
+        # Schedule next update (~30fps)
+        if self.isAnimating:
+            self.animation_id = self.root.after(33, self._animate_meters)
 
     def _get_params(self) -> Dict[str, Any]:
         """Get all current parameters."""
