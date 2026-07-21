@@ -99,10 +99,19 @@ python3 voice_filter.py
 
 | Efecto | Rango | Descripción |
 |--------|-------|-------------|
-| VU Meter | -20 a +3 dB | Visualización de nivel de audio |
 | Volume | 0.0 - 2.0 | Ajuste de amplitud |
 | Pitch | -12 - +12 st | Cambio de tono |
 | Speed | 0.5x - 2.0x | Velocidad de reproducción |
+
+### Visualización
+
+| Componente | Posición | Descripción |
+|------------|----------|-------------|
+| VU Meter | Derecha de ondas | Visualización de nivel de audio (-20 a +3 dB) |
+| Waveform Original | Izquierda | Onda del audio original (verde) |
+| Spectrogram Original | Debajo de onda original | Mapa de frecuencias (color por intensidad) |
+| Waveform Modified | Debajo de spectrogram original | Onda del audio modificado (naranja) |
+| Spectrogram Modified | Debajo de onda modificada | Mapa de frecuencias del audio procesado |
 
 ### EQ (🔵 Cyan)
 
@@ -312,11 +321,11 @@ current_level += velocity
 
 ### Layout Grid
 
-El tab Basic usa un grid layout con 4 columnas de igual ancho:
+El tab Basic usa un grid layout con 3 columnas de igual ancho:
 
 ```python
 # Todas las columnas tienen el mismo peso
-for i in range(4):
+for i in range(3):
     content_frame.columnconfigure(i, weight=1, uniform='basic')
 
 # Los canales se expanden para llenar su columna

@@ -34,7 +34,7 @@ def create_slider(gui, parent: ttk.Frame, row: int, label: str,
 
 
 def create_basic_tab(gui, parent: ttk.Frame) -> None:
-    """Create basic parameters tab with mixer-style faders and VU meter."""
+    """Create basic parameters tab with mixer-style faders."""
     inner = tk.Frame(parent, bg=COLORS['channel_bg'])
     inner.pack(fill=tk.BOTH, expand=True)
 
@@ -44,31 +44,8 @@ def create_basic_tab(gui, parent: ttk.Frame) -> None:
     content_frame = tk.Frame(inner, bg=COLORS['channel_bg'])
     content_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-    for i in range(4):
+    for i in range(3):
         content_frame.columnconfigure(i, weight=1, uniform='basic')
-
-    # VU Meter channel
-    vu_channel = tk.Frame(content_frame, bg=COLORS['channel_bg'],
-                         highlightbackground=COLORS['channel_border'],
-                         highlightthickness=1)
-    vu_channel.grid(row=0, column=0, padx=4, pady=5, sticky='nsew')
-
-    from widgets.vu_meter import AnalogVUMeter
-
-    tk.Label(vu_channel, text="VU", font=('', 9, 'bold'),
-            fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(5, 2))
-
-    vu_meter_container = tk.Frame(vu_channel, bg=COLORS['channel_bg'])
-    vu_meter_container.pack(fill=tk.X, padx=5, pady=2)
-    gui.vu_meter = AnalogVUMeter(vu_meter_container, width=120, height=120, color=COLORS['basic'])
-    gui.vu_meter.pack(expand=True)
-
-    vu_val_frame = tk.Frame(vu_channel, bg=COLORS['meter_bg'], height=18)
-    vu_val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
-    vu_val_frame.pack_propagate(False)
-    gui.vu_value_label = tk.Label(vu_val_frame, text="-60.0 dB",
-                                  font=('', 8), fg=COLORS['led_green'], bg=COLORS['meter_bg'])
-    gui.vu_value_label.pack(expand=True)
 
     # Faders
     faders = [
@@ -81,7 +58,7 @@ def create_basic_tab(gui, parent: ttk.Frame) -> None:
         channel = tk.Frame(content_frame, bg=COLORS['channel_bg'],
                          highlightbackground=COLORS['channel_border'],
                          highlightthickness=1)
-        channel.grid(row=0, column=col + 1, padx=4, pady=5, sticky='nsew')
+        channel.grid(row=0, column=col, padx=4, pady=5, sticky='nsew')
 
         tk.Label(channel, text=label_text, font=('', 9, 'bold'),
                 fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(5, 2))

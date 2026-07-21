@@ -126,34 +126,33 @@ Audio Modificado
 ### Estructura de la Interfaz
 
 ```
-+--------------------------------------------------+
-|  Menu: File | Edit | Help                        |
-+--------------------------------------------------+
-|  Transport:                                       |
-|  [Open] [Play Original] [Play Modified]          |
-|  [Stop] [Save] [Reset] [Exit]                    |
-|  [✓ Auto-Preview]                                |
-+--------------------------------------------------+
-|  Visualization:                                   |
-|  Original: [=======~~~~======] (verde)           |
-|  Spectrogram: [colores por frecuencia]            |
-|  Modified: [==~~====~~====~~==] (naranja)         |
-|  Spectrogram: [colores por frecuencia]            |
-+--------------------------------------------------+
-|  [Basic] [EQ] [Filters] [Modulation] ...         |
-|  +----------------------------------------------+|
-|  |  Tab Basic (4 columnas de igual ancho):      ||
-|  |  +--------+--------+--------+--------+       ||
-|  |  |   VU   |  VOL   | PITCH  | SPEED  |       ||
-|  |  | Meter  |  Fader | Fader  | Fader  |       ||
-|  |  | [-20   | 0.0%   | 0.0 st | 1.0x   |       ||
-|  |  |  to    |        |        |        |       ||
-|  |  |  +3]   |        |        |        |       ||
-|  |  +--------+--------+--------+--------+       ||
-|  +----------------------------------------------+|
-+--------------------------------------------------+
-|  Status: Ready                                    |
-+--------------------------------------------------+
++----------------------------------------------------------+
+|  Menu: File | Edit | Help                                |
++----------------------------------------------------------+
+|  Transport:                                               |
+|  [Open] [Play Original] [Play Modified]                  |
+|  [Stop] [Save] [Reset] [Exit]                            |
+|  [✓ Auto-Preview]                                        |
++----------------------------------------------------------+
+|  Visualization:                          |  VU Meter      |
+|  Original: [=======~~~~======] (verde)   |  +----------+  |
+|  Spectrogram: [colores por frecuencia]   |  |  VU      |  |
+|  Modified: [==~~====~~====~~==] (naranja) |  |  Meter   |  |
+|  Spectrogram: [colores por frecuencia]   |  | [-20+3]  |  |
+|                                           |  +----------+  |
++----------------------------------------------------------+
+|  [Basic] [EQ] [Filters] [Modulation] ...                 |
+|  +------------------------------------------------------+|
+|  |  Tab Basic (3 columnas de igual ancho):              ||
+|  |  +--------+--------+--------+                        ||
+|  |  |  VOL   | PITCH  | SPEED  |                        ||
+|  |  | Fader  | Fader  | Fader  |                        ||
+|  |  | 0.0%   | 0.0 st | 1.0x   |                        ||
+|  |  +--------+--------+--------+                        ||
+|  +------------------------------------------------------+|
++----------------------------------------------------------+
+|  Status: Ready                                            |
++----------------------------------------------------------+
 ```
 
 ## Flujo de Datos
@@ -264,7 +263,7 @@ def play_audio(self, audio, callback=None, playback_id=0):
 
 | Categoría | Color | Efectos |
 |-----------|-------|---------|
-| Basic | 🔵 Azul | VU Meter, Volume, Pitch, Speed |
+| Basic | 🔵 Azul | Volume, Pitch, Speed |
 | EQ | 🔵 Cyan | 5-band equalizer |
 | Filters | 🔵 Cyan | Low-pass, High-pass |
 | Modulation | 🟣 Púrpura | Chorus, Flanger, Phaser, Tremolo, Vibrato |
@@ -333,18 +332,30 @@ level = np.clip(level, 0.0, 1.0)
 
 ### Layout del Tab Basic
 
-El tab Basic usa un grid layout con 4 columnas de igual ancho:
+El tab Basic usa un grid layout con 3 columnas de igual ancho:
 
 ```python
-# Grid con 4 columnas uniformes
-for i in range(4):
+# Grid con 3 columnas uniformes
+for i in range(3):
     content_frame.columnconfigure(i, weight=1, uniform='basic')
 
-# Columna 0: VU Meter
-vu_channel.grid(row=0, column=0, sticky='nsew')
+# Columnas 0-2: Faders (VOL, PITCH, SPEED)
+channel.grid(row=0, column=col, sticky='nsew')
+```
 
-# Columnas 1-3: Faders (VOL, PITCH, SPEED)
-channel.grid(row=0, column=col + 1, sticky='nsew')
+### Layout de Visualización + VU Meter
+
+La visualización (ondas + spectrogramas) y el VU meter están lado a lado:
+
+```python
+# Frame horizontal con grid
+viz_vu_frame.columnconfigure(0, weight=1)  # Visualización se expande
+
+# Columna 0: Waveforms + Spectrograms (se expande)
+waveform.grid(row=0, column=0, sticky='ew')
+
+# Columna 1: VU Meter (ancho fijo)
+vu_panel.grid(row=0, column=1, sticky='nsew')
 ```
 
 ## Compatibilidad

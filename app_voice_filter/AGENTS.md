@@ -84,7 +84,7 @@ class VoiceFilterGUI:
     _create_waveform(parent) -> None
     _create_params_notebook(parent) -> None
     _create_slider(parent, row, label, variable, from_, to, unit, color) -> MixerFader
-    _create_basic_tab(parent) -> None       # VU Meter + 3 faders (grid 4 columnas iguales)
+    _create_basic_tab(parent) -> None       # 3 faders (grid 3 columnas iguales)
     _create_eq_tab(parent) -> None
     _open_audio() -> None
     _save_modified() -> None

@@ -127,8 +127,40 @@ class VoiceFilterGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         self._create_transport(main_frame)
-        self._create_waveform(main_frame)
+
+        # Visualization + VU meter side by side
+        viz_vu_frame = tk.Frame(main_frame, bg=COLORS['bg'])
+        viz_vu_frame.pack(fill=tk.X, pady=(0, 5))
+        viz_vu_frame.columnconfigure(0, weight=1)
+
+        self._create_waveform(viz_vu_frame)
+        self._create_vu_meter_panel(viz_vu_frame)
+
         self._create_params_notebook(main_frame)
+
+    def _create_vu_meter_panel(self, parent: tk.Frame) -> None:
+        """Create VU meter panel on the right side of visualization."""
+        from widgets.vu_meter import AnalogVUMeter
+
+        vu_panel = tk.Frame(parent, bg=COLORS['channel_bg'],
+                           highlightbackground=COLORS['channel_border'],
+                           highlightthickness=1)
+        vu_panel.grid(row=0, column=1, sticky=tk.NSEW, padx=(5, 0), pady=0)
+
+        tk.Label(vu_panel, text="VU", font=('', 9, 'bold'),
+                fg=COLORS['basic'], bg=COLORS['channel_bg']).pack(pady=(5, 2))
+
+        vu_meter_container = tk.Frame(vu_panel, bg=COLORS['channel_bg'])
+        vu_meter_container.pack(fill=tk.X, padx=5, pady=2)
+        self.vu_meter = AnalogVUMeter(vu_meter_container, width=120, height=120, color=COLORS['basic'])
+        self.vu_meter.pack(expand=True)
+
+        vu_val_frame = tk.Frame(vu_panel, bg=COLORS['meter_bg'], height=18)
+        vu_val_frame.pack(fill=tk.X, padx=5, pady=(2, 5))
+        vu_val_frame.pack_propagate(False)
+        self.vu_value_label = tk.Label(vu_val_frame, text="-60.0 dB",
+                                      font=('', 8), fg=COLORS['led_green'], bg=COLORS['meter_bg'])
+        self.vu_value_label.pack(expand=True)
 
     def _create_transport(self, parent: ttk.Frame) -> None:
         """Create transport controls."""
@@ -151,52 +183,40 @@ class VoiceFilterGUI:
         waveform = tk.Frame(parent, bg=COLORS['channel_bg'],
                           highlightbackground=COLORS['channel_border'],
                           highlightthickness=1)
-        waveform.pack(fill=tk.X, pady=(0, 5), padx=2)
+        waveform.grid(row=0, column=0, sticky=tk.EW, padx=0, pady=0)
 
         tk.Label(waveform, text="VISUALIZATION", font=('', 9, 'bold'),
                 fg=COLORS['fg_dim'], bg=COLORS['channel_bg']).pack(anchor=tk.W, padx=10, pady=(5, 2))
 
-        # Original waveform + spectrogram
-        orig_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
-        orig_frame.pack(fill=tk.X, padx=10, pady=2)
-        tk.Label(orig_frame, text="ORIGINAL", font=('', 8, 'bold'),
-                fg=COLORS['success'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
+        # Use grid for perfect alignment
+        vis_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
+        vis_frame.pack(fill=tk.X, padx=10, pady=2)
+        vis_frame.columnconfigure(1, weight=1)
 
-        self.waveform_canvas = tk.Canvas(orig_frame, bg=COLORS['meter_bg'], height=50,
-                                        highlightbackground=COLORS['channel_border'],
-                                        highlightthickness=1)
-        self.waveform_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+        labels = [
+            ("ORIGINAL", COLORS['success'], 0),
+            ("SPEC ORIG", COLORS['success'], 1),
+            ("MODIFIED", COLORS['warning'], 2),
+            ("SPEC MOD", COLORS['warning'], 3),
+        ]
+        heights = [50, 80, 50, 80]
+        self._vis_canvases = []
 
-        orig_spec_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
-        orig_spec_frame.pack(fill=tk.X, padx=10, pady=(0, 2))
-        tk.Label(orig_spec_frame, text="SPECTROGRAM", font=('', 7, 'bold'),
-                fg=COLORS['success'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
+        for i, (text, color, row) in enumerate(labels):
+            lbl = tk.Label(vis_frame, text=text, font=('', 7, 'bold'),
+                          fg=color, bg=COLORS['channel_bg'], width=10, anchor=tk.W)
+            lbl.grid(row=row, column=0, sticky=tk.W, padx=(0, 5), pady=1)
 
-        self.spectrogram_canvas = tk.Canvas(orig_spec_frame, bg=COLORS['meter_bg'], height=80,
-                                           highlightbackground=COLORS['channel_border'],
-                                           highlightthickness=1)
-        self.spectrogram_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+            canvas = tk.Canvas(vis_frame, bg=COLORS['meter_bg'], height=heights[i],
+                             highlightbackground=COLORS['channel_border'],
+                             highlightthickness=1)
+            canvas.grid(row=row, column=1, sticky=tk.EW, pady=1)
+            self._vis_canvases.append(canvas)
 
-        # Modified waveform + spectrogram
-        mod_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
-        mod_frame.pack(fill=tk.X, padx=10, pady=2)
-        tk.Label(mod_frame, text="MODIFIED", font=('', 8, 'bold'),
-                fg=COLORS['warning'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
-
-        self.modified_canvas = tk.Canvas(mod_frame, bg=COLORS['meter_bg'], height=50,
-                                        highlightbackground=COLORS['channel_border'],
-                                        highlightthickness=1)
-        self.modified_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
-
-        mod_spec_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
-        mod_spec_frame.pack(fill=tk.X, padx=10, pady=(0, 2))
-        tk.Label(mod_spec_frame, text="SPECTROGRAM", font=('', 7, 'bold'),
-                fg=COLORS['warning'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
-
-        self.modified_spectrogram_canvas = tk.Canvas(mod_spec_frame, bg=COLORS['meter_bg'], height=80,
-                                                    highlightbackground=COLORS['channel_border'],
-                                                    highlightthickness=1)
-        self.modified_spectrogram_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+        self.waveform_canvas = self._vis_canvases[0]
+        self.spectrogram_canvas = self._vis_canvases[1]
+        self.modified_canvas = self._vis_canvases[2]
+        self.modified_spectrogram_canvas = self._vis_canvases[3]
 
         self.waveform_info = tk.Label(waveform, text="No audio loaded",
                                      font=('', 8), fg=COLORS['fg_dim'], bg=COLORS['channel_bg'])
