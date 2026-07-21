@@ -113,8 +113,14 @@ Audio Modificado
 +--------------------------------------------------+
 |  [Basic] [EQ] [Filters] [Modulation] ...         |
 |  +----------------------------------------------+|
-|  |  Parámetros por categoría                    ||
-|  |  (Sliders con valores)                       ||
+|  |  Tab Basic (4 columnas de igual ancho):      ||
+|  |  +--------+--------+--------+--------+       ||
+|  |  |   VU   |  VOL   | PITCH  | SPEED  |       ||
+|  |  | Meter  |  Fader | Fader  | Fader  |       ||
+|  |  | [-20   | 0.0%   | 0.0 st | 1.0x   |       ||
+|  |  |  to    |        |        |        |       ||
+|  |  |  +3]   |        |        |        |       ||
+|  |  +--------+--------+--------+--------+       ||
 |  +----------------------------------------------+|
 +--------------------------------------------------+
 |  Status: Ready                                    |
@@ -223,7 +229,7 @@ def play_audio(self, audio, callback=None):
 
 | Categoría | Color | Efectos |
 |-----------|-------|---------|
-| Basic | 🔵 Azul | Volume, Pitch, Speed |
+| Basic | 🔵 Azul | VU Meter, Volume, Pitch, Speed |
 | EQ | 🔵 Cyan | 5-band equalizer |
 | Filters | 🔵 Cyan | Low-pass, High-pass |
 | Modulation | 🟣 Púrpura | Chorus, Flanger, Phaser, Tremolo, Vibrato |
@@ -250,6 +256,61 @@ if volume != 1.0:
 | `soundfile` | E/S de audio | >=0.12.0 |
 | `sounddevice` | Reproducción de audio | >=0.4.6 |
 | `tkinter` | Interfaz gráfica | Incluido con Python |
+
+## VU Meter - Escala y Mapeo
+
+### Escala Visual
+
+El VU meter analógico muestra una escala de **-20 dB a +3 dB**:
+
+```
+Posición del needle:  0.0                    1.0
+                      |                       |
+Escala dB:          -20  -10  -7  -5  -3   0  +1  +2  +3
+                    |    |    |   |   |    |   |   |   |
+Color:             verde      verde   amarillo    rojo
+```
+
+### Mapeo de Niveles de Audio
+
+Durante la reproducción, el nivel RMS del audio se convierte a la posición del needle:
+
+```python
+# Conversión de RMS a dB
+level_db = 20 * np.log10(rms)  # rango típico: -60 a 0 dB
+
+# Mapeo a posición del needle (0.0 a 1.0)
+# VU meter scale: -20 dB = 0.0, +3 dB = 1.0
+level = (level_db - vu_db_min) / (vu_db_max - vu_db_min)
+level = np.clip(level, 0.0, 1.0)
+```
+
+### Ejemplos de Mapeo
+
+| RMS | dB | Needle Position | Label Visual |
+|-----|-----|-----------------|--------------|
+| 0.001 | -60 dB | 0.00 | -20 (clip inferior) |
+| 0.01 | -40 dB | 0.00 | -20 (clip inferior) |
+| 0.1 | -20 dB | 0.00 | **-20** |
+| 0.5 | -6 dB | 0.61 | entre -7 y -5 |
+| 1.0 | 0 dB | 0.87 | **0** |
+| 1.41 | +3 dB | 1.00 | **+3** (clip superior) |
+
+### Layout del Tab Basic
+
+El tab Basic usa un grid layout con 4 columnas de igual ancho:
+
+```python
+# Grid con 4 columnas uniformes
+for i in range(4):
+    content_frame.columnconfigure(i, weight=1, uniform='basic')
+
+# Columna 0: VU Meter
+vu_channel.grid(row=0, column=0, sticky='nsew')
+
+# Columnas 1-3: Faders (VOL, PITCH, SPEED)
+channel.grid(row=0, column=col + 1, sticky='nsew')
+```
 
 ## Compatibilidad
 

@@ -99,6 +99,7 @@ python3 voice_filter.py
 
 | Efecto | Rango | Descripción |
 |--------|-------|-------------|
+| VU Meter | -20 a +3 dB | Visualización de nivel de audio |
 | Volume | 0.0 - 2.0 | Ajuste de amplitud |
 | Pitch | -12 - +12 st | Cambio de tono |
 | Speed | 0.5x - 2.0x | Velocidad de reproducción |
@@ -272,3 +273,52 @@ thread = threading.Thread(target=_play, daemon=True)
 - Exportación a múltiples formatos
 - Presets guardables
 - Historial de cambios (undo/redo)
+
+## VU Meter - Detalles Técnicos
+
+### Componentes
+
+| Componente | Descripción |
+|------------|-------------|
+| `AnalogVUMeter` | Widget Canvas con aguja animada |
+| `MixerFader` | Widget Canvas con medidor LED |
+| Física de resorte | Simula rebote de aguja con damping |
+
+### Escala del VU Meter
+
+| Parámetro | Valor | Descripción |
+|-----------|-------|-------------|
+| `_db_min` | -20 dB | Posición 0.0 del needle |
+| `_db_max` | +3 dB | Posición 1.0 del needle |
+| Rango total | 23 dB | De -20 a +3 dB |
+| Colores | Verde/Amarillo/Rojo | Indicación visual de nivel |
+
+### Física de la Aguja
+
+```python
+# Parámetros de animación
+attack_speed = 0.2      # Velocidad de subida
+decay_speed = 0.04      # Velocidad de bajada
+damping = 0.82          # Amortiguación
+spring_constant = 0.35  # Constante del resorte
+
+# Ecuación de movimiento
+error = target_level - current_level
+spring_force = error * spring_constant
+velocity += spring_force * (attack_speed if error > 0 else decay_speed)
+velocity *= damping
+current_level += velocity
+```
+
+### Layout Grid
+
+El tab Basic usa un grid layout con 4 columnas de igual ancho:
+
+```python
+# Todas las columnas tienen el mismo peso
+for i in range(4):
+    content_frame.columnconfigure(i, weight=1, uniform='basic')
+
+# Los canales se expanden para llenar su columna
+channel.grid(row=0, column=col, sticky='nsew')
+```

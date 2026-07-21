@@ -63,20 +63,50 @@ class AudioProcessor:
 ```python
 class VoiceFilterGUI:
     """Interfaz gráfica de usuario."""
-    
+
     # Métodos principales:
     _create_transport(parent) -> None
     _create_waveform(parent) -> None
     _create_params_notebook(parent) -> None
-    _create_slider(parent, row, label, variable, from_, to, unit, color) -> Scale
+    _create_slider(parent, row, label, variable, from_, to, unit, color) -> MixerFader
+    _create_basic_tab(parent) -> None       # VU Meter + 3 faders (grid 4 columnas iguales)
+    _create_eq_tab(parent) -> None
     _open_audio() -> None
     _save_modified() -> None
     _play_original() -> None
     _play_modified() -> None
     _stop_audio() -> None
+    _start_animation() -> None
+    _stop_animation() -> None
+    _animate_meters() -> None               # Actualiza VU meter y fader levels durante reproducción
     _reset_all() -> None
     _draw_original_waveform() -> None
     _draw_modified_waveform() -> None
+```
+
+#### AnalogVUMeter
+```python
+class AnalogVUMeter(tk.Canvas):
+    """VU meter analógico con física de rebote de aguja."""
+
+    # Atributos de escala:
+    _db_min: int    # -20 dB (posición 0.0 del needle)
+    _db_max: int    # +3 dB (posición 1.0 del needle)
+
+    # Métodos:
+    set_level(level: float) -> None    # level: 0.0 (-20 dB) a 1.0 (+3 dB)
+    _animate_needle() -> None          # Física de resorte con attack/decay
+    _draw() -> None                    # Dibuja arco, ticks, labels, aguja
+```
+
+#### MixerFader
+```python
+class MixerFader(tk.Canvas):
+    """Fader estilo mixer con medidor LED."""
+
+    # Métodos:
+    set_audio_level(level: float) -> None    # Para animación del medidor LED
+    set_value(value: float) -> None
 ```
 
 ## Key Files to Modify
