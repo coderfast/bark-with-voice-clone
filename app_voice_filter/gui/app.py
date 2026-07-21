@@ -4,6 +4,7 @@ from tkinter import ttk, filedialog, messagebox
 import numpy as np
 from typing import Optional, Dict, Any
 from scipy.signal import spectrogram as scipy_spectrogram
+from PIL import Image, ImageTk
 
 from config.colors import COLORS
 from audio.processor import AudioProcessor
@@ -29,6 +30,12 @@ class VoiceFilterGUI:
         # Audio processor
         self.processor = AudioProcessor()
         self.filepath: Optional[str] = None
+
+        # Presets directory
+        app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self._presets_dir = os.path.join(app_dir, 'presets')
+        os.makedirs(self._presets_dir, exist_ok=True)
+        self._last_audio_dir = app_dir
 
         # Auto-preview
         self.auto_preview_var = tk.BooleanVar(value=False)
@@ -100,24 +107,24 @@ class VoiceFilterGUI:
 
     def _create_menu(self) -> None:
         """Create the menu bar."""
-        menubar = tk.Menu(self.root, bg=COLORS['bg'], fg=COLORS['fg'])
+        menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
 
-        file_menu = tk.Menu(menubar, tearoff=0, bg=COLORS['bg'], fg=COLORS['fg'])
+        file_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="File", menu=file_menu)
         file_menu.add_command(label="Open Audio", command=self._open_audio)
         file_menu.add_command(label="Save Modified", command=self._save_modified)
         file_menu.add_separator()
-        file_menu.add_command(label="Save Preset", command=self._save_preset)
         file_menu.add_command(label="Load Preset", command=self._load_preset)
+        file_menu.add_command(label="Save Preset", command=self._save_preset)
         file_menu.add_separator()
         file_menu.add_command(label="Exit", command=self._exit_app)
 
-        edit_menu = tk.Menu(menubar, tearoff=0, bg=COLORS['bg'], fg=COLORS['fg'])
+        edit_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Edit", menu=edit_menu)
         edit_menu.add_command(label="Reset All", command=self._reset_all)
 
-        help_menu = tk.Menu(menubar, tearoff=0, bg=COLORS['bg'], fg=COLORS['fg'])
+        help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="About", command=self._show_about)
 
@@ -277,7 +284,7 @@ class VoiceFilterGUI:
 
     def _draw_spectrogram(self, audio: np.ndarray, canvas: tk.Canvas,
                           vmin: float = -80, vmax: float = 0) -> None:
-        """Draw spectrogram on canvas using colored rectangles."""
+        """Draw spectrogram on canvas using PIL image (fast)."""
         canvas.delete("all")
         if audio is None or len(audio) == 0:
             return
@@ -301,60 +308,54 @@ class VoiceFilterGUI:
         # Convert to dB
         Sxx_db = 10 * np.log10(Sxx + 1e-10)
 
-        # Limit to first half of frequencies (up to Nyquist)
+        # Limit to first half of frequencies
         n_freqs = min(len(f), height)
         Sxx_db = Sxx_db[:n_freqs, :]
 
-        # Reshape to fit canvas dimensions
+        # Reshape to fit canvas
         n_time = min(len(t), width)
         if n_time < 2 or n_freqs < 2:
             return
 
-        # Downsample to fit
         time_indices = np.clip(np.linspace(0, n_time - 1, n_time).astype(int), 0, n_time - 1)
         freq_indices = np.clip(np.linspace(0, n_freqs - 1, n_freqs).astype(int), 0, n_freqs - 1)
         Sxx_resized = Sxx_db[np.ix_(freq_indices, time_indices)]
 
-        # Normalize to 0-1 range
+        # Normalize to 0-1
         Sxx_norm = np.clip((Sxx_resized - vmin) / (vmax - vmin), 0, 1)
 
-        # Draw each cell as a colored rectangle
-        cell_w = max(1, width // n_time)
-        cell_h = max(1, height // n_freqs)
+        # Vectorized colormap (black->blue->green->yellow->red)
+        r = np.zeros_like(Sxx_norm, dtype=np.uint8)
+        g = np.zeros_like(Sxx_norm, dtype=np.uint8)
+        b = np.zeros_like(Sxx_norm, dtype=np.uint8)
 
-        for xi in range(n_time):
-            for yi in range(n_freqs):
-                val = Sxx_norm[yi, xi]
-                if val < 0.01:
-                    continue  # Skip very quiet cells
-                r, g, b = self._spectrogram_colormap(val)
-                color = f'#{r:02x}{g:02x}{b:02x}'
-                x0 = xi * cell_w
-                y0 = height - (yi + 1) * cell_h  # Flip Y (low freq at bottom)
-                x1 = x0 + cell_w
-                y1 = y0 + cell_h
-                canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline='')
+        m1 = Sxx_norm < 0.25
+        m2 = (Sxx_norm >= 0.25) & (Sxx_norm < 0.5)
+        m3 = (Sxx_norm >= 0.5) & (Sxx_norm < 0.75)
+        m4 = Sxx_norm >= 0.75
 
-    @staticmethod
-    def _spectrogram_colormap(val: float):
-        """Convert 0-1 value to RGB for spectrogram (black->blue->green->yellow->red)."""
-        val = max(0.0, min(1.0, val))
-        if val < 0.25:
-            # Black to dark blue
-            t = val / 0.25
-            return (0, 0, int(80 * t + 40))
-        elif val < 0.5:
-            # Dark blue to green
-            t = (val - 0.25) / 0.25
-            return (0, int(180 * t), int(120 - 40 * t))
-        elif val < 0.75:
-            # Green to yellow
-            t = (val - 0.5) / 0.25
-            return (int(220 * t), int(180 + 40 * t), 0)
-        else:
-            # Yellow to red
-            t = (val - 0.75) / 0.25
-            return (220 + int(35 * t), int(220 - 180 * t), 0)
+        t1 = Sxx_norm[m1] / 0.25
+        b[m1] = (80 * t1 + 40).astype(np.uint8)
+
+        t2 = (Sxx_norm[m2] - 0.25) / 0.25
+        g[m2] = (180 * t2).astype(np.uint8)
+        b[m2] = (120 - 40 * t2).astype(np.uint8)
+
+        t3 = (Sxx_norm[m3] - 0.5) / 0.25
+        r[m3] = (220 * t3).astype(np.uint8)
+        g[m3] = (180 + 40 * t3).astype(np.uint8)
+
+        t4 = (Sxx_norm[m4] - 0.75) / 0.25
+        r[m4] = (220 + 35 * t4).astype(np.uint8)
+        g[m4] = (220 - 180 * t4).astype(np.uint8)
+
+        # Build RGB image and flip Y (low freq at bottom)
+        img_rgb = np.flipud(np.stack([r, g, b], axis=-1))
+        pil_img = Image.fromarray(img_rgb)
+        # Store reference on canvas to prevent garbage collection
+        canvas._spectrogram_photo = ImageTk.PhotoImage(pil_img)
+
+        canvas.create_image(0, 0, anchor=tk.NW, image=canvas._spectrogram_photo)
 
     def _draw_original_waveform(self) -> None:
         """Draw original waveform and spectrogram."""
@@ -384,9 +385,11 @@ class VoiceFilterGUI:
             filetypes=[
                 ("Audio files", "*.wav *.mp3 *.aac *.ogg *.flac *.m4a *.wma"),
                 ("All files", "*.*"),
-            ]
+            ],
+            initialdir=self._last_audio_dir
         )
         if filepath:
+            self._last_audio_dir = os.path.dirname(filepath)
             if self.processor.load_audio(filepath):
                 self.filepath = filepath
                 self.trim_end_var.set(self.processor.duration)
@@ -409,9 +412,11 @@ class VoiceFilterGUI:
         filepath = filedialog.asksaveasfilename(
             defaultextension=".wav",
             filetypes=[("WAV files", "*.wav"), ("All files", "*.*")],
+            initialdir=self._last_audio_dir,
             initialfile="modified_audio.wav"
         )
         if filepath:
+            self._last_audio_dir = os.path.dirname(filepath)
             processed = self.processor.apply_process_all(self._get_params())
             if self.processor.save_audio(filepath, processed):
                 self._log(f"Modified saved to: {os.path.basename(filepath)}")
@@ -429,6 +434,7 @@ class VoiceFilterGUI:
         filepath = filedialog.asksaveasfilename(
             defaultextension=".json",
             filetypes=[("JSON files", "*.json"), ("Preset files", "*.preset"), ("All files", "*.*")],
+            initialdir=self._presets_dir,
             initialfile="mixer_preset.json"
         )
         if filepath:
@@ -447,7 +453,8 @@ class VoiceFilterGUI:
                 ("JSON files", "*.json"),
                 ("Preset files", "*.preset"),
                 ("All files", "*.*"),
-            ]
+            ],
+            initialdir=self._presets_dir
         )
         if filepath:
             try:
@@ -498,6 +505,10 @@ class VoiceFilterGUI:
         self.trim_start_var.set(params.get('trim_start', 0.0))
         self.trim_end_var.set(params.get('trim_end', self.processor.duration if self.processor.duration else 0))
         self.reverse_var.set(params.get('reverse', False))
+
+        # Redraw all faders to reflect new values
+        for fader in self.faders:
+            fader._draw()
 
     # Playback
     def _play_original(self) -> None:
@@ -716,6 +727,8 @@ Features:
 - Auto-preview mode
 - Color-coded UI
 - Cross-platform support
+
+Author: Eduardo P. A. alias coderfast
 
 License: MIT""")
 
