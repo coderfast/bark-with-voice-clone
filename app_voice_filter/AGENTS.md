@@ -10,11 +10,26 @@ Voice Filter es una aplicación de procesamiento de audio con interfaz gráfica 
 
 ```
 app_voice_filter/
-├── voice_filter.py          # Aplicación principal (GUI + procesamiento)
-├── requirements.txt         # Dependencias de Python
-├── APP_ARCHITECTURE.md      # Documentación de arquitectura
-├── APP_TECHNICALSTACK.md    # Documentación técnica
-└── AGENTS.md                # Este archivo
+├── voice_filter.py              # Entry point
+├── config/
+│   ├── __init__.py
+│   └── colors.py                # Diccionario COLORS
+├── audio/
+│   ├── __init__.py
+│   └── processor.py             # AudioProcessor (carga, efectos, reproduccion)
+├── widgets/
+│   ├── __init__.py
+│   ├── mixer_fader.py           # MixerFader (fader custom con LED meter)
+│   └── vu_meter.py              # AnalogVUMeter (VU meter analogico)
+├── gui/
+│   ├── __init__.py
+│   ├── app.py                   # VoiceFilterGUI (clase principal)
+│   └── tabs.py                  # Funciones de creacion de pestanas
+├── requirements.txt
+├── APP_ARCHITECTURE.md
+├── APP_TECHNICALSTACK.md
+├── ROADMAP.md
+└── AGENTS.md
 ```
 
 ## Key Architecture
