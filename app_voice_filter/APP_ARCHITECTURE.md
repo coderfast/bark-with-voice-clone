@@ -39,7 +39,7 @@ app_voice_filter/
 | `audio/` | `processor.py` | AudioProcessor: carga, efectos, playback (~434 líneas) |
 | `widgets/` | `mixer_fader.py` | MixerFader: fader custom con LED meter (~269 líneas) |
 | `widgets/` | `vu_meter.py` | AnalogVUMeter: VU meter con física de aguja (~163 líneas) |
-| `gui/` | `app.py` | VoiceFilterGUI: clase principal (~607 líneas) |
+| `gui/` | `app.py` | VoiceFilterGUI: clase principal (~713 lineas) |
 | `gui/` | `tabs.py` | 8 funciones de creación de pestañas (~401 líneas) |
 
 ### Componentes Principales
@@ -134,9 +134,11 @@ Audio Modificado
 |  [Stop] [Save] [Reset] [Exit]                    |
 |  [✓ Auto-Preview]                                |
 +--------------------------------------------------+
-|  Waveform:                                        |
+|  Visualization:                                   |
 |  Original: [=======~~~~======] (verde)           |
+|  Spectrogram: [colores por frecuencia]            |
 |  Modified: [==~~====~~====~~==] (naranja)         |
+|  Spectrogram: [colores por frecuencia]            |
 +--------------------------------------------------+
 |  [Basic] [EQ] [Filters] [Modulation] ...         |
 |  +----------------------------------------------+|

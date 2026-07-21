@@ -3,6 +3,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import numpy as np
 from typing import Optional, Dict, Any
+from scipy.signal import spectrogram as scipy_spectrogram
 
 from config.colors import COLORS
 from audio.processor import AudioProcessor
@@ -146,15 +147,16 @@ class VoiceFilterGUI:
                         variable=self.auto_preview_var).pack(side=tk.RIGHT, padx=10)
 
     def _create_waveform(self, parent: ttk.Frame) -> None:
-        """Create waveform visualization with mixer console styling."""
+        """Create waveform and spectrogram visualization."""
         waveform = tk.Frame(parent, bg=COLORS['channel_bg'],
                           highlightbackground=COLORS['channel_border'],
                           highlightthickness=1)
         waveform.pack(fill=tk.X, pady=(0, 5), padx=2)
 
-        tk.Label(waveform, text="WAVEFORM DISPLAY", font=('', 9, 'bold'),
+        tk.Label(waveform, text="VISUALIZATION", font=('', 9, 'bold'),
                 fg=COLORS['fg_dim'], bg=COLORS['channel_bg']).pack(anchor=tk.W, padx=10, pady=(5, 2))
 
+        # Original waveform + spectrogram
         orig_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
         orig_frame.pack(fill=tk.X, padx=10, pady=2)
         tk.Label(orig_frame, text="ORIGINAL", font=('', 8, 'bold'),
@@ -165,6 +167,17 @@ class VoiceFilterGUI:
                                         highlightthickness=1)
         self.waveform_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
 
+        orig_spec_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
+        orig_spec_frame.pack(fill=tk.X, padx=10, pady=(0, 2))
+        tk.Label(orig_spec_frame, text="SPECTROGRAM", font=('', 7, 'bold'),
+                fg=COLORS['success'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
+
+        self.spectrogram_canvas = tk.Canvas(orig_spec_frame, bg=COLORS['meter_bg'], height=80,
+                                           highlightbackground=COLORS['channel_border'],
+                                           highlightthickness=1)
+        self.spectrogram_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+
+        # Modified waveform + spectrogram
         mod_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
         mod_frame.pack(fill=tk.X, padx=10, pady=2)
         tk.Label(mod_frame, text="MODIFIED", font=('', 8, 'bold'),
@@ -174,6 +187,16 @@ class VoiceFilterGUI:
                                         highlightbackground=COLORS['channel_border'],
                                         highlightthickness=1)
         self.modified_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
+
+        mod_spec_frame = tk.Frame(waveform, bg=COLORS['channel_bg'])
+        mod_spec_frame.pack(fill=tk.X, padx=10, pady=(0, 2))
+        tk.Label(mod_spec_frame, text="SPECTROGRAM", font=('', 7, 'bold'),
+                fg=COLORS['warning'], bg=COLORS['channel_bg']).pack(side=tk.LEFT)
+
+        self.modified_spectrogram_canvas = tk.Canvas(mod_spec_frame, bg=COLORS['meter_bg'], height=80,
+                                                    highlightbackground=COLORS['channel_border'],
+                                                    highlightthickness=1)
+        self.modified_spectrogram_canvas.pack(fill=tk.X, padx=(10, 0), expand=True)
 
         self.waveform_info = tk.Label(waveform, text="No audio loaded",
                                      font=('', 8), fg=COLORS['fg_dim'], bg=COLORS['channel_bg'])
@@ -232,17 +255,100 @@ class VoiceFilterGUI:
         if len(points) >= 4:
             canvas.create_line(points, fill=color, width=1)
 
+    def _draw_spectrogram(self, audio: np.ndarray, canvas: tk.Canvas,
+                          vmin: float = -80, vmax: float = 0) -> None:
+        """Draw spectrogram on canvas using colored rectangles."""
+        canvas.delete("all")
+        if audio is None or len(audio) == 0:
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width <= 1 or height <= 1:
+            return
+
+        # Compute spectrogram
+        nperseg = min(1024, len(audio) // 4)
+        if nperseg < 64:
+            nperseg = 64
+        noverlap = nperseg * 3 // 4
+
+        try:
+            f, t, Sxx = scipy_spectrogram(audio, fs=self.processor.sample_rate,
+                                          nperseg=nperseg, noverlap=noverlap)
+        except Exception:
+            return
+
+        # Convert to dB
+        Sxx_db = 10 * np.log10(Sxx + 1e-10)
+
+        # Limit to first half of frequencies (up to Nyquist)
+        n_freqs = min(len(f), height)
+        Sxx_db = Sxx_db[:n_freqs, :]
+
+        # Reshape to fit canvas dimensions
+        n_time = min(len(t), width)
+        if n_time < 2 or n_freqs < 2:
+            return
+
+        # Downsample to fit
+        time_indices = np.clip(np.linspace(0, n_time - 1, n_time).astype(int), 0, n_time - 1)
+        freq_indices = np.clip(np.linspace(0, n_freqs - 1, n_freqs).astype(int), 0, n_freqs - 1)
+        Sxx_resized = Sxx_db[np.ix_(freq_indices, time_indices)]
+
+        # Normalize to 0-1 range
+        Sxx_norm = np.clip((Sxx_resized - vmin) / (vmax - vmin), 0, 1)
+
+        # Draw each cell as a colored rectangle
+        cell_w = max(1, width // n_time)
+        cell_h = max(1, height // n_freqs)
+
+        for xi in range(n_time):
+            for yi in range(n_freqs):
+                val = Sxx_norm[yi, xi]
+                if val < 0.01:
+                    continue  # Skip very quiet cells
+                r, g, b = self._spectrogram_colormap(val)
+                color = f'#{r:02x}{g:02x}{b:02x}'
+                x0 = xi * cell_w
+                y0 = height - (yi + 1) * cell_h  # Flip Y (low freq at bottom)
+                x1 = x0 + cell_w
+                y1 = y0 + cell_h
+                canvas.create_rectangle(x0, y0, x1, y1, fill=color, outline='')
+
+    @staticmethod
+    def _spectrogram_colormap(val: float):
+        """Convert 0-1 value to RGB for spectrogram (black->blue->green->yellow->red)."""
+        val = max(0.0, min(1.0, val))
+        if val < 0.25:
+            # Black to dark blue
+            t = val / 0.25
+            return (0, 0, int(80 * t + 40))
+        elif val < 0.5:
+            # Dark blue to green
+            t = (val - 0.25) / 0.25
+            return (0, int(180 * t), int(120 - 40 * t))
+        elif val < 0.75:
+            # Green to yellow
+            t = (val - 0.5) / 0.25
+            return (int(220 * t), int(180 + 40 * t), 0)
+        else:
+            # Yellow to red
+            t = (val - 0.75) / 0.25
+            return (220 + int(35 * t), int(220 - 180 * t), 0)
+
     def _draw_original_waveform(self) -> None:
-        """Draw original waveform."""
+        """Draw original waveform and spectrogram."""
         self._draw_waveform(self.processor.original_audio, self.waveform_canvas, COLORS['success'])
+        self._draw_spectrogram(self.processor.original_audio, self.spectrogram_canvas)
 
     def _draw_modified_waveform(self) -> None:
-        """Draw modified waveform."""
+        """Draw modified waveform and spectrogram."""
         if self.processor.original_audio is None:
             return
         try:
             processed = self.processor.apply_process_all(self._get_params())
             self._draw_waveform(processed, self.modified_canvas, COLORS['warning'])
+            self._draw_spectrogram(processed, self.modified_spectrogram_canvas)
         except Exception:
             pass
 

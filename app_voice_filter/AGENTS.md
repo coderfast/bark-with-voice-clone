@@ -268,3 +268,5 @@ COLORS = {
 - La reproducción usa hilos separados para no bloquear la UI
 - El waveform modificado se actualiza al soltar cualquier slider
 - Los efectos se aplican en orden: Basic → EQ → Filters → Modulation → Distortion → Time → Dynamics → Utility
+- Los spectrogramas se muestran debajo de cada waveform (original y modificado) usando `scipy.signal.spectrogram`
+- El colormap del spectrograma va de negro (silencio) → azul → verde → amarillo → rojo (más fuerte)
