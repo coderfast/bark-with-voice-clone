@@ -66,3 +66,4 @@ __hugginface_downloads/
 /app_voice_filter/ffmpeg/bin
 /app_voice_filter/ffmpeg/doc
 /app_voice_filter/ffmpeg/LICENSE.txt
+/app_voice_filter/config.json
