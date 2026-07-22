@@ -63,3 +63,6 @@ __hugginface_downloads/
 /app_clone_voice/bark/assets/prompts/*.npz
 /build/lib/bark/assets/prompts/*.npz
 /bark/assets/prompts/mi_voz.npz
+/app_voice_filter/ffmpeg/bin
+/app_voice_filter/ffmpeg/doc
+/app_voice_filter/ffmpeg/LICENSE.txt
