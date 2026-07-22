@@ -26,6 +26,7 @@ class VoiceFilterGUI:
         self.root.geometry("1000x800")
         self.root.minsize(900, 700)
         self.root.configure(bg=COLORS['bg'])
+        self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
 
         # Audio processor
         self.processor = AudioProcessor()
@@ -735,6 +736,11 @@ License: MIT""")
     def _exit_app(self) -> None:
         """Exit the application."""
         self._stop_audio()
+        # Small delay to let audio stop cleanly before destroying widgets
+        self.root.after(100, self._force_exit)
+
+    def _force_exit(self) -> None:
+        """Force exit after audio stop delay."""
         self.root.quit()
         self.root.destroy()
 
