@@ -36,7 +36,10 @@ class VoiceFilterGUI:
         app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self._presets_dir = os.path.join(app_dir, 'presets')
         os.makedirs(self._presets_dir, exist_ok=True)
-        self._last_audio_dir = app_dir
+
+        # Config file for persistent settings
+        self._config_path = os.path.join(app_dir, 'config.json')
+        self._last_audio_dir = self._load_config().get('last_audio_dir', app_dir)
 
         # Auto-preview
         self.auto_preview_var = tk.BooleanVar(value=False)
@@ -257,6 +260,26 @@ class VoiceFilterGUI:
         status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+    def _load_config(self) -> dict:
+        """Load config from JSON file."""
+        import json
+        try:
+            with open(self._config_path, 'r') as f:
+                return json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    def _save_config(self) -> None:
+        """Save config to JSON file."""
+        import json
+        config = self._load_config()
+        config['last_audio_dir'] = self._last_audio_dir
+        try:
+            with open(self._config_path, 'w') as f:
+                json.dump(config, f, indent=2)
+        except Exception:
+            pass
+
     # Waveform drawing
     def _draw_waveform(self, audio: np.ndarray, canvas: tk.Canvas, color: str) -> None:
         """Draw waveform on canvas."""
@@ -391,6 +414,7 @@ class VoiceFilterGUI:
         )
         if filepath:
             self._last_audio_dir = os.path.dirname(filepath)
+            self._save_config()
             if self.processor.load_audio(filepath):
                 self.filepath = filepath
                 self.trim_end_var.set(self.processor.duration)
@@ -418,6 +442,7 @@ class VoiceFilterGUI:
         )
         if filepath:
             self._last_audio_dir = os.path.dirname(filepath)
+            self._save_config()
             processed = self.processor.apply_process_all(self._get_params())
             if self.processor.save_audio(filepath, processed):
                 self._log(f"Modified saved to: {os.path.basename(filepath)}")
