@@ -23,10 +23,14 @@ app_voice_filter/
 │   ├── __init__.py
 │   ├── app.py                   # VoiceFilterGUI (clase principal)
 │   └── tabs.py                  # Funciones de creacion de pestanas
+├── ffmpeg/
+│   └── bin/                     # ffmpeg.exe (para MP3/AAC/M4A/WMA)
+├── presets/                     # Carpeta de presets por defecto
 ├── requirements.txt
 ├── APP_ARCHITECTURE.md
 ├── APP_TECHNICALSTACK.md
-└── ROADMAP.md
+├── ROADMAP.md
+└── AGENTS.md
 ```
 
 ## Arquitectura de la Aplicación
@@ -287,9 +291,24 @@ if volume != 1.0:
 |----------|-----------|---------|
 | `numpy` | Computación numérica | >=1.24.0 |
 | `scipy` | Procesamiento de señales | >=1.10.0 |
-| `soundfile` | E/S de audio | >=0.12.0 |
+| `soundfile` | E/S de audio (WAV, FLAC, OGG) | >=0.12.0 |
 | `sounddevice` | Reproducción de audio | >=0.4.6 |
+| `pydub` | E/S de audio (MP3, AAC, M4A, WMA) | >=0.25.1 |
+| `Pillow` | Generación de imágenes (spectrogramas) | >=9.0.0 |
 | `tkinter` | Interfaz gráfica | Incluido con Python |
+| `ffmpeg` | Codificación/decodificación de audio | En `ffmpeg/bin/` |
+
+### Formatos Soportados
+
+| Formato | Extensión | Backend | Soporte |
+|---------|-----------|---------|---------|
+| WAV | `.wav` | soundfile | ✅ Completo |
+| FLAC | `.flac` | soundfile | ✅ Completo |
+| OGG | `.ogg` | soundfile | ✅ Completo |
+| MP3 | `.mp3` | pydub+ffmpeg | ✅ Completo |
+| AAC | `.aac` | pydub+ffmpeg | ✅ Completo |
+| M4A | `.m4a` | pydub+ffmpeg | ✅ Completo |
+| WMA | `.wma` | pydub+ffmpeg | ✅ Completo |
 
 ## VU Meter - Escala y Mapeo
 

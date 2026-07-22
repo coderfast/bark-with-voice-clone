@@ -21,8 +21,11 @@
 |----------|-----------|
 | **NumPy** | Computación numérica, arrays |
 | **SciPy** | Filtros, ecualización, procesamiento de señales |
-| **SoundFile** | Lectura/escritura de archivos de audio |
+| **SoundFile** | Lectura/escritura de WAV, FLAC, OGG |
 | **SoundDevice** | Reproducción de audio en tiempo real |
+| **Pydub** | Lectura/escritura de MP3, AAC, M4A, WMA |
+| **Pillow** | Generación de imágenes (spectrogramas) |
+| **FFmpeg** | Codificación/decodificación de audio (en ffmpeg/bin/) |
 
 ### Formatos Soportados
 
@@ -79,7 +82,7 @@ python voice_filter.py
 
 ```bash
 cd app_voice_filter
-sudo apt-get install python3-tk libportaudio2
+sudo apt-get install python3-tk libportaudio2 ffmpeg
 pip install -r requirements.txt
 python3 voice_filter.py
 ```
@@ -88,10 +91,14 @@ python3 voice_filter.py
 
 ```bash
 cd app_voice_filter
-brew install python@3.10
+brew install python@3.10 ffmpeg
 pip install -r requirements.txt
 python3 voice_filter.py
 ```
+
+### Nota sobre FFmpeg
+
+FFmpeg es necesario para soporte de MP3, AAC, M4A y WMA. La aplicación busca ffmpeg en `app_voice_filter/ffmpeg/bin/` primero, luego en el PATH del sistema.
 
 ## Efectos de Audio
 
@@ -224,8 +231,17 @@ class AudioProcessor:
 ```
 numpy>=1.24.0
 scipy>=1.10.0
+Pillow>=9.0.0
 soundfile>=0.12.0
 sounddevice>=0.4.6
+pydub>=0.25.1
+audioop-lts>=0.2.0  # Solo para Python 3.13+
+```
+
+### Requisitos del Sistema
+
+```
+ffmpeg  # En ffmpeg/bin/ o en PATH (para MP3/AAC/M4A/WMA)
 ```
 
 ### Opcionales

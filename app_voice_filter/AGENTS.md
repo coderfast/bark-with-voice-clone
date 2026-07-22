@@ -169,9 +169,13 @@ class MixerFader(tk.Canvas):
 ```
 numpy>=1.24.0
 scipy>=1.10.0
+Pillow>=9.0.0
 soundfile>=0.12.0
 sounddevice>=0.4.6
+pydub>=0.25.1
+audioop-lts>=0.2.0  # Solo para Python 3.13+
 tkinter (incluido con Python)
+ffmpeg (en ffmpeg/bin/ o en PATH)
 ```
 
 ## Running the App
