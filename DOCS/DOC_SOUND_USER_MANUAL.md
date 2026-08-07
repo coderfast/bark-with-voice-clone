@@ -1,4 +1,4 @@
-# SOUND_USER_MANUAL.md — La Biblia del Sonido
+# La Biblia del Sonido
 
 > Guía completa del sonido en informática: desde conceptos básicos hasta análisis avanzado.
 > Cómo interpretar las 18 visualizaciones generadas por el proyecto.
