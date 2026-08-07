@@ -58,6 +58,8 @@ def generate_audio_cli(
     text_temp: float = 0.7,
     waveform_temp: float = 0.7,
     small_models: bool = False,
+    no_viz: bool = False,
+    viz_level: str = "basic",
 ) -> str:
     """Generate audio from text using Bark.
 
@@ -71,12 +73,14 @@ def generate_audio_cli(
         text_temp: Text generation temperature
         waveform_temp: Waveform generation temperature
         small_models: Use small models (faster but lower quality)
+        no_viz: Skip generating visualization plots
+        viz_level: Visualization level (basic, speech, full)
 
     Returns:
         Path to generated audio file
     """
     from bark import SAMPLE_RATE, generate_audio, preload_models
-    from bark.api import save_audio
+    from bark.api import save_audio, save_audio_with_visualizations
 
     # Ensure output directory exists
     os.makedirs(os.path.dirname(output) if os.path.dirname(output) else '.', exist_ok=True)
@@ -111,8 +115,23 @@ def generate_audio_cli(
     # Determine effective sample rate for saving
     effective_sr = sample_rate if sample_rate else SAMPLE_RATE
 
-    # Save audio
-    save_audio(output, audio, sample_rate=effective_sr, source_sample_rate=effective_sr)
+    # Save audio and visualizations
+    if no_viz:
+        save_audio(output, audio, sample_rate=effective_sr, source_sample_rate=effective_sr)
+        print(f"\nAudio saved to: {output}")
+    else:
+        results = save_audio_with_visualizations(
+            filepath=output,
+            audio=audio,
+            sample_rate=effective_sr,
+            source_sample_rate=SAMPLE_RATE,
+            visualizations=viz_level,
+        )
+        print(f"\nAudio saved to: {results['audio']}")
+        print(f"Visualizations ({len(results) - 1} files):")
+        for viz_type, path in sorted(results.items()):
+            if viz_type != 'audio':
+                print(f"  {viz_type}: {path}")
 
     # Get file size
     file_size = os.path.getsize(output)
@@ -121,7 +140,7 @@ def generate_audio_cli(
     else:
         size_str = f"{file_size / 1024:.1f} KB"
 
-    print(f"\nAudio saved to: {output} ({size_str})")
+    print(f"Size: {size_str}")
     return output
 
 
@@ -207,6 +226,9 @@ Examples:
   # Generate with custom audio settings
   python bark_cli.py generate "Hello" -v en_speaker_0 -o output.wav --sample-rate 44100 --bits 16 --channels mono
 
+  # Generate without visualization plots
+  python bark_cli.py generate "Hello" -o output.wav --no-viz
+
   # Clone a voice
   python bark_cli.py clone --audio reference.wav --name my_voice
 
@@ -237,6 +259,11 @@ Examples:
                                  help="Waveform generation temperature (default: 0.7)")
     generate_parser.add_argument("--small", action="store_true",
                                  help="Use small models (faster but lower quality)")
+    generate_parser.add_argument("--no-viz", action="store_true",
+                                 help="Skip generating visualization plots")
+    generate_parser.add_argument("--viz-level", choices=["basic", "speech", "full"],
+                                 default="basic",
+                                 help="Visualization level: basic (4), speech (11), full (19)")
 
     # Clone command
     clone_parser = subparsers.add_parser("clone", help="Clone a voice from audio")
@@ -267,6 +294,7 @@ Examples:
             text_temp=args.text_temp,
             waveform_temp=args.waveform_temp,
             small_models=args.small,
+            no_viz=args.no_viz,
         )
 
     elif args.command == "clone":

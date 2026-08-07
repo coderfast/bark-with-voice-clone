@@ -20,6 +20,7 @@ dependencies = [
     "fairseq",
     "funcy",
     "huggingface-hub",
+    "matplotlib",
     "numpy",
     "scipy",
     "tokenizers",

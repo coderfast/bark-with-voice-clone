@@ -1,10 +1,19 @@
 import os
+import sys
+import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import numpy as np
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Callable
 from scipy.signal import spectrogram as scipy_spectrogram
 from PIL import Image, ImageTk
+from multiprocessing import shared_memory
+
+# Add parent directory to path for utils.audio_visualizer import
+_app_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_parent_dir = os.path.dirname(_app_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
 
 from config.colors import COLORS
 from audio.processor import AudioProcessor
@@ -14,6 +23,34 @@ from gui.tabs import (
     create_modulation_tab, create_distortion_tab, create_time_tab,
     create_dynamics_tab, create_utility_tab
 )
+
+
+_shm_ref = None
+_shm_shape = None
+_shm_dtype = None
+
+
+def _viz_worker_init(shm_name, shape, dtype):
+    """Attach to shared memory in each worker process."""
+    global _shm_ref, _shm_shape, _shm_dtype
+    _shm_ref = shared_memory.SharedMemory(name=shm_name)
+    _shm_shape = shape
+    _shm_dtype = dtype
+
+
+def _viz_worker(task):
+    """Worker: read audio from shared memory, generate one plot."""
+    global _shm_ref, _shm_shape, _shm_dtype
+    name, func_module, func_name, sr, path = task
+    audio_mono = np.ndarray(_shm_shape, dtype=_shm_dtype, buffer=_shm_ref.buf)
+    if func_module == 'audio_visualizer':
+        from utils import audio_visualizer
+        func = getattr(audio_visualizer, func_name)
+    else:
+        from utils import speech_analyzer
+        func = getattr(speech_analyzer, func_name)
+    func(audio_mono, sr, path)
+    return name
 
 
 class VoiceFilterGUI:
@@ -43,6 +80,15 @@ class VoiceFilterGUI:
 
         # Auto-preview
         self.auto_preview_var = tk.BooleanVar(value=False)
+
+        # Visualization state
+        self._viz_running = False
+        self._viz_count = 0
+        self._viz_total = 0
+        self._viz_dialog = None
+        self._exit_after_viz = False
+        self._viz_shm = None
+        self._viz_shm_arr = None
 
         # Animation state
         self.faders: list = []
@@ -430,7 +476,7 @@ class VoiceFilterGUI:
         self._draw_modified_waveform()
 
     def _save_modified(self) -> None:
-        """Save modified audio."""
+        """Save modified audio and generate visualization plots."""
         if self.processor.original_audio is None:
             messagebox.showwarning("Warning", "No audio to save")
             return
@@ -445,9 +491,145 @@ class VoiceFilterGUI:
             self._save_config()
             processed = self.processor.apply_process_all(self._get_params())
             if self.processor.save_audio(filepath, processed):
-                self._log(f"Modified saved to: {os.path.basename(filepath)}")
+                self._log(f"Saving: {os.path.basename(filepath)}...")
+                self._viz_running = True
+                self._viz_count = 0
+                threading.Thread(
+                    target=self._generate_viz_process,
+                    args=(filepath, processed),
+                    daemon=True,
+                ).start()
             else:
                 messagebox.showerror("Error", "Failed to save modified audio")
+
+    def _show_viz_progress(self) -> None:
+        """Show progress dialog for visualization generation."""
+        if self._viz_dialog is not None:
+            return
+        self._viz_dialog = tk.Toplevel(self.root)
+        self._viz_dialog.title("Generando visualizaciones")
+        self._viz_dialog.geometry("320x120")
+        self._viz_dialog.resizable(False, False)
+        self._viz_dialog.configure(bg=COLORS['bg'])
+        self._viz_dialog.transient(self.root)
+        # No grab_set — keeps main loop responsive for root.after() callbacks
+        self._viz_dialog.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        frame = tk.Frame(self._viz_dialog, bg=COLORS['bg'])
+        frame.pack(expand=True, fill=tk.BOTH, padx=20, pady=15)
+
+        self._viz_label = tk.Label(
+            frame, text="Generando gráficas...",
+            font=("Segoe UI", 11), bg=COLORS['bg'], fg=COLORS['fg'],
+        )
+        self._viz_label.pack(pady=(0, 10))
+
+        self._viz_progress = ttk.Progressbar(
+            frame, length=260, mode='determinate', maximum=self._viz_total,
+        )
+        self._viz_progress.pack()
+
+    def _update_viz_progress(self, name: str) -> None:
+        """Update progress bar and label."""
+        self._viz_count += 1
+        if self._viz_dialog is not None:
+            self._viz_label.config(text=f"Generando gráfica {self._viz_count}/{self._viz_total}: {name}")
+            self._viz_progress['value'] = self._viz_count
+
+    def _close_viz_dialog(self) -> None:
+        """Close progress dialog and optionally exit app."""
+        self._viz_running = False
+        if self._viz_dialog is not None:
+            self._viz_dialog.destroy()
+            self._viz_dialog = None
+        if self._exit_after_viz:
+            self._exit_app()
+
+    def _generate_viz_process(self, filepath: str, audio: np.ndarray) -> None:
+        """Generate all visualizations using multiprocessing Pool with shared memory."""
+        from multiprocessing import Pool
+        import os
+
+        output_dir = os.path.dirname(filepath) or '.'
+        base_name = os.path.splitext(os.path.basename(filepath))[0]
+        sr = self.processor.sample_rate
+
+        if audio.ndim > 1:
+            audio_mono = np.mean(audio, axis=0).astype(np.float32)
+        else:
+            audio_mono = audio.astype(np.float32).copy()
+
+        # Create shared memory for audio data (zero-copy between processes)
+        shm_name = f'viz_{os.getpid()}'
+        shm = shared_memory.SharedMemory(name=shm_name, create=True, size=audio_mono.nbytes)
+        # Keep references alive so GC doesn't release the buffer
+        self._viz_shm = shm
+        self._viz_shm_arr = np.ndarray(audio_mono.shape, dtype=audio_mono.dtype, buffer=shm.buf)
+        self._viz_shm_arr[:] = audio_mono[:]
+
+        # Build task list
+        task_specs = []
+        try:
+            from utils import audio_visualizer
+            for name, func_name in [
+                ('wave', 'generate_waveform'), ('pitch', 'generate_pitch'),
+                ('sweep', 'generate_sweep'), ('specgram', 'generate_spectrogram'),
+                ('flatness', 'generate_spectral_flatness'), ('zcr', 'generate_zero_crossing_rate'),
+                ('cqt', 'generate_cqt_spectrogram'), ('chroma', 'generate_chromagram'),
+                ('selfsim', 'generate_self_similarity'), ('lpc', 'generate_lpc_spectrum'),
+                ('spec_wb_nb', 'generate_spectrogram_wide_narrow'),
+            ]:
+                task_specs.append((name, 'audio_visualizer', func_name, sr,
+                                   os.path.join(output_dir, f'{base_name}_{name}.png')))
+        except ImportError:
+            pass
+
+        try:
+            from utils import speech_analyzer
+            for name, func_name in [
+                ('mel', 'generate_mel_spectrogram'), ('mfcc', 'generate_mfcc'),
+                ('formants', 'generate_formants'), ('pitch_voiced', 'generate_pitch_voicing'),
+                ('intensity', 'generate_intensity'), ('jitter_shimmer', 'generate_jitter_shimmer'),
+                ('hnr', 'generate_hnr'),
+            ]:
+                task_specs.append((name, 'speech_analyzer', func_name, sr,
+                                   os.path.join(output_dir, f'{base_name}_{name}.png')))
+        except ImportError:
+            pass
+
+        self._viz_total = len(task_specs)
+        self._viz_count = 0
+        self.root.after(0, self._show_viz_progress)
+
+        workers = min(len(task_specs), os.cpu_count() or 4)
+        success = 0
+        failed = []
+
+        pool = None
+        try:
+            pool = Pool(
+                processes=workers,
+                initializer=_viz_worker_init,
+                initargs=(shm.name, audio_mono.shape, audio_mono.dtype),
+            )
+            for name in pool.imap_unordered(_viz_worker, task_specs):
+                success += 1
+                self.root.after(0, self._update_viz_progress, name)
+        except Exception as e:
+            failed.append(str(e))
+        finally:
+            if pool is not None:
+                pool.close()
+                pool.join()
+            shm.close()
+            shm.unlink()
+            self._viz_shm = None
+            self._viz_shm_arr = None
+
+        self.root.after(0, self._close_viz_dialog)
+        self.root.after(0, lambda: self._log(f"Saved: {os.path.basename(filepath)} + {success} plots"))
+        if failed:
+            self.root.after(0, lambda: self._log(f"  Failed: {', '.join(failed)}"))
 
     # Presets
     def _save_preset(self) -> None:
@@ -760,6 +942,9 @@ License: MIT""")
 
     def _exit_app(self) -> None:
         """Exit the application."""
+        if self._viz_running:
+            self._exit_after_viz = True
+            return
         self._stop_audio()
         # Small delay to let audio stop cleanly before destroying widgets
         self.root.after(100, self._force_exit)

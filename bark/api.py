@@ -291,3 +291,198 @@ def save_audio(
 
     # Save file
     wavfile.write(filepath, effective_sr, audio)
+
+
+def save_audio_with_visualizations(
+    filepath: str,
+    audio: np.ndarray,
+    sample_rate: Optional[int] = None,
+    bits_per_sample: Optional[int] = None,
+    channels: Optional[Literal["mono", "stereo"]] = None,
+    source_sample_rate: int = SAMPLE_RATE,
+    visualizations: str = "basic",
+) -> dict:
+    """Save audio array to file and generate visualization plots.
+
+    Args:
+        filepath: Output file path (.wav)
+        audio: Audio array (float32 normalized to [-1, 1])
+        sample_rate: Output sample rate (11025, 22050, 44100, or None for source rate)
+        bits_per_sample: Bit depth (8 or 16, or None for float32)
+        channels: Channels ("mono" or "stereo", or None for original)
+        source_sample_rate: Source sample rate of the audio array
+        visualizations: Level of visualizations to generate:
+            - "basic": 4 core visualizations (wave, pitch, sweep, specgram)
+            - "full": all 19 visualizations
+            - "speech": 11 speech-focused visualizations
+            - list: explicit list of visualization names
+
+    Returns:
+        Dictionary with 'audio' path and visualization paths
+    """
+    import os
+    from utils.audio_visualizer import (
+        generate_all_visualizations, generate_waveform, generate_pitch,
+        generate_sweep, generate_spectrogram, generate_spectral_flatness,
+        generate_zero_crossing_rate, generate_cqt_spectrogram,
+        generate_chromagram, generate_self_similarity, generate_lpc_spectrum,
+        generate_spectrogram_wide_narrow,
+    )
+
+    # Save audio file
+    save_audio(filepath, audio, sample_rate, bits_per_sample, channels, source_sample_rate)
+
+    # Determine effective sample rate for visualization
+    effective_sr = sample_rate if sample_rate is not None else source_sample_rate
+
+    # Apply same transformations for visualization (before bit depth conversion)
+    audio_viz = audio.copy()
+    if sample_rate is not None and sample_rate != source_sample_rate:
+        audio_viz = _resample_audio(audio_viz, source_sample_rate, sample_rate)
+    if channels is not None:
+        audio_viz = _convert_channels(audio_viz, channels)
+
+    # Convert to mono for visualization
+    if audio_viz.ndim > 1:
+        audio_mono = np.mean(audio_viz, axis=0)
+    else:
+        audio_mono = audio_viz
+
+    # Generate visualizations in same directory as audio
+    output_dir = os.path.dirname(filepath) or '.'
+    base_name = os.path.splitext(os.path.basename(filepath))[0]
+
+    # Determine which visualizations to generate
+    if visualizations == "basic":
+        viz_results = generate_all_visualizations(
+            audio=audio_mono, sample_rate=effective_sr,
+            output_path=output_dir, prefix=base_name,
+        )
+    elif visualizations == "speech":
+        viz_results = generate_all_visualizations(
+            audio=audio_mono, sample_rate=effective_sr,
+            output_path=output_dir, prefix=base_name,
+        )
+        # Add speech-specific visualizations
+        try:
+            from utils.speech_analyzer import (
+                generate_mel_spectrogram, generate_mfcc, generate_formants,
+                generate_pitch_voicing, generate_intensity, generate_jitter_shimmer,
+                generate_hnr,
+            )
+            p = os.path.join(output_dir, f"{base_name}_mel.png")
+            generate_mel_spectrogram(audio_mono, effective_sr, p)
+            viz_results['mel'] = p
+            p = os.path.join(output_dir, f"{base_name}_mfcc.png")
+            generate_mfcc(audio_mono, effective_sr, p)
+            viz_results['mfcc'] = p
+            p = os.path.join(output_dir, f"{base_name}_formants.png")
+            generate_formants(audio_mono, effective_sr, p)
+            viz_results['formants'] = p
+            p = os.path.join(output_dir, f"{base_name}_pitch_voiced.png")
+            generate_pitch_voicing(audio_mono, effective_sr, p)
+            viz_results['pitch_voiced'] = p
+            p = os.path.join(output_dir, f"{base_name}_intensity.png")
+            generate_intensity(audio_mono, effective_sr, p)
+            viz_results['intensity'] = p
+            p = os.path.join(output_dir, f"{base_name}_jitter_shimmer.png")
+            generate_jitter_shimmer(audio_mono, effective_sr, p)
+            viz_results['jitter_shimmer'] = p
+            p = os.path.join(output_dir, f"{base_name}_hnr.png")
+            generate_hnr(audio_mono, effective_sr, p)
+            viz_results['hnr'] = p
+        except ImportError:
+            pass
+    elif visualizations == "full":
+        # Generate all basic visualizations
+        viz_results = generate_all_visualizations(
+            audio=audio_mono, sample_rate=effective_sr,
+            output_path=output_dir, prefix=base_name,
+        )
+        # Add speech-specific
+        try:
+            from utils.speech_analyzer import (
+                generate_mel_spectrogram, generate_mfcc, generate_formants,
+                generate_pitch_voicing, generate_intensity, generate_jitter_shimmer,
+                generate_hnr,
+            )
+            for name, func in [
+                ('mel', generate_mel_spectrogram),
+                ('mfcc', generate_mfcc),
+                ('formants', generate_formants),
+                ('pitch_voiced', generate_pitch_voicing),
+                ('intensity', generate_intensity),
+                ('jitter_shimmer', generate_jitter_shimmer),
+                ('hnr', generate_hnr),
+            ]:
+                p = os.path.join(output_dir, f"{base_name}_{name}.png")
+                func(audio_mono, effective_sr, p)
+                viz_results[name] = p
+        except ImportError:
+            pass
+        # Add audio_visualizer extended
+        try:
+            for name, func in [
+                ('flatness', generate_spectral_flatness),
+                ('zcr', generate_zero_crossing_rate),
+                ('cqt', generate_cqt_spectrogram),
+                ('chroma', generate_chromagram),
+                ('selfsim', generate_self_similarity),
+                ('lpc', generate_lpc_spectrum),
+                ('spec_wb_nb', generate_spectrogram_wide_narrow),
+            ]:
+                p = os.path.join(output_dir, f"{base_name}_{name}.png")
+                func(audio_mono, effective_sr, p)
+                viz_results[name] = p
+        except ImportError:
+            pass
+    elif isinstance(visualizations, list):
+        viz_results = {}
+        # Map names to functions
+        all_funcs = {
+            'wave': lambda a, sr, p: generate_waveform(a, sr, p),
+            'pitch': lambda a, sr, p: generate_pitch(a, sr, p),
+            'sweep': lambda a, sr, p: generate_sweep(a, sr, p),
+            'specgram': lambda a, sr, p: generate_spectrogram(a, sr, p),
+            'flatness': lambda a, sr, p: generate_spectral_flatness(a, sr, p),
+            'zcr': lambda a, sr, p: generate_zero_crossing_rate(a, sr, p),
+            'cqt': lambda a, sr, p: generate_cqt_spectrogram(a, sr, p),
+            'chroma': lambda a, sr, p: generate_chromagram(a, sr, p),
+            'selfsim': lambda a, sr, p: generate_self_similarity(a, sr, p),
+            'lpc': lambda a, sr, p: generate_lpc_spectrum(a, sr, p),
+            'spec_wb_nb': lambda a, sr, p: generate_spectrogram_wide_narrow(a, sr, p),
+        }
+        # Add speech analyzer functions
+        try:
+            from utils.speech_analyzer import (
+                generate_mel_spectrogram, generate_mfcc, generate_formants,
+                generate_pitch_voicing, generate_intensity, generate_jitter_shimmer,
+                generate_hnr,
+            )
+            all_funcs.update({
+                'mel': generate_mel_spectrogram,
+                'mfcc': generate_mfcc,
+                'formants': generate_formants,
+                'pitch_voiced': generate_pitch_voicing,
+                'intensity': generate_intensity,
+                'jitter_shimmer': generate_jitter_shimmer,
+                'hnr': generate_hnr,
+            })
+        except ImportError:
+            pass
+
+        for name in visualizations:
+            if name in all_funcs:
+                p = os.path.join(output_dir, f"{base_name}_{name}.png")
+                try:
+                    all_funcs[name](audio_mono, effective_sr, p)
+                    viz_results[name] = p
+                except Exception:
+                    pass
+    else:
+        viz_results = generate_all_visualizations(
+            audio=audio_mono, sample_rate=effective_sr,
+            output_path=output_dir, prefix=base_name,
+        )
+
+    return {'audio': filepath, **viz_results}
