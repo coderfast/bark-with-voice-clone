@@ -107,10 +107,20 @@ class AudioProcessor:
             return False
 
     def play_audio(self, audio: np.ndarray, callback: Optional[callable] = None,
-                   playback_id: int = 0) -> None:
-        """Play audio in a separate thread."""
+                   playback_id: int = 0,
+                   start_time_callback: Optional[callable] = None) -> None:
+        """Play audio in a separate thread.
+
+        Args:
+            audio: Audio data to play.
+            callback: Called with playback_id when playback finishes.
+            playback_id: Identifier for this playback session.
+            start_time_callback: Called with time.time() just before sd.play()
+                                 starts, for accurate cursor synchronization.
+        """
         try:
             import sounddevice as sd
+            import time as _time
         except ImportError:
             print("Error: sounddevice not installed. Run: pip install sounddevice")
             return
@@ -131,6 +141,8 @@ class AudioProcessor:
 
         def _play():
             try:
+                if start_time_callback:
+                    start_time_callback(_time.time())
                 sd.play(audio, self.sample_rate)
                 sd.wait()
             except Exception as e:

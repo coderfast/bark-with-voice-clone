@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import threading
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
@@ -99,6 +100,10 @@ class VoiceFilterGUI:
         self.playback_position = 0
         self.playback_audio = None
         self.playback_sample_rate = None
+        self._playback_canvas: Optional[tk.Canvas] = None
+        self._cursor_item: Optional[int] = None
+        self._playback_start_time: float = 0.0
+        self._resize_after_id = None
 
         # Variables
         self._create_variables()
@@ -275,6 +280,9 @@ class VoiceFilterGUI:
         self.modified_canvas = self._vis_canvases[2]
         self.modified_spectrogram_canvas = self._vis_canvases[3]
 
+        for canvas in self._vis_canvases:
+            canvas.bind('<Configure>', self._on_canvas_resize)
+
         self.waveform_info = tk.Label(waveform, text="No audio loaded",
                                      font=('', 8), fg=COLORS['fg_dim'], bg=COLORS['channel_bg'])
         self.waveform_info.pack(anchor=tk.W, padx=10, pady=(2, 5))
@@ -426,6 +434,59 @@ class VoiceFilterGUI:
         canvas._spectrogram_photo = ImageTk.PhotoImage(pil_img)
 
         canvas.create_image(0, 0, anchor=tk.NW, image=canvas._spectrogram_photo)
+
+    def _create_cursor(self, canvas: tk.Canvas) -> None:
+        """Create playback cursor on the given canvas."""
+        self._remove_cursor()
+        self._playback_canvas = canvas
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        self._cursor_item = canvas.create_line(
+            0, 0, 0, height,
+            fill='#ffffff', width=2, tags='cursor'
+        )
+
+    def _update_cursor(self, position: int, total_samples: int) -> None:
+        """Move cursor to reflect current playback position."""
+        canvas = self._playback_canvas
+        if canvas is None or self._cursor_item is None:
+            return
+        if not canvas.winfo_exists():
+            return
+        width = canvas.winfo_width()
+        height = canvas.winfo_height()
+        if width <= 1 or total_samples <= 0:
+            return
+        x = round((position / total_samples) * width)
+        x = max(0, min(x, width - 1))
+        canvas.coords(self._cursor_item, x, 0, x, height)
+
+    def _remove_cursor(self) -> None:
+        """Remove playback cursor from canvas."""
+        if self._playback_canvas is not None and self._cursor_item is not None:
+            if self._playback_canvas.winfo_exists():
+                self._playback_canvas.delete(self._cursor_item)
+        self._cursor_item = None
+        self._playback_canvas = None
+
+    def _on_canvas_resize(self, event: tk.Event) -> None:
+        """Handle canvas resize with debounce to redraw waveforms."""
+        if self.processor.original_audio is None:
+            return
+        if self._resize_after_id is not None:
+            self.root.after_cancel(self._resize_after_id)
+        self._resize_after_id = self.root.after(100, self._on_canvas_resize_done)
+
+    def _on_canvas_resize_done(self) -> None:
+        """Redraw waveforms after resize debounce."""
+        self._resize_after_id = None
+        if self.processor.original_audio is None:
+            return
+        active_canvas = self._playback_canvas
+        self._draw_original_waveform()
+        self._draw_modified_waveform()
+        if self.isAnimating and self.playback_audio is not None and active_canvas is not None:
+            self._create_cursor(active_canvas)
 
     def _draw_original_waveform(self) -> None:
         """Draw original waveform and spectrogram."""
@@ -731,11 +792,13 @@ class VoiceFilterGUI:
         self.playback_audio = self.processor.original_audio
         self.playback_sample_rate = self.processor.sample_rate
         self.playback_position = 0
+        self._create_cursor(self.waveform_canvas)
         self._start_animation()
         self.processor.play_audio(self.processor.original_audio,
                                   callback=lambda pid: self.root.after(
                                       0, self._on_playback_finished, pid),
-                                  playback_id=current_id)
+                                  playback_id=current_id,
+                                  start_time_callback=lambda t: setattr(self, '_playback_start_time', t))
 
     def _play_modified(self) -> None:
         """Play modified audio with meter animation."""
@@ -749,11 +812,13 @@ class VoiceFilterGUI:
         self.playback_audio = processed
         self.playback_sample_rate = self.processor.sample_rate
         self.playback_position = 0
+        self._create_cursor(self.modified_canvas)
         self._start_animation()
         self.processor.play_audio(processed,
                                   callback=lambda pid: self.root.after(
                                       0, self._on_playback_finished, pid),
-                                  playback_id=current_id)
+                                  playback_id=current_id,
+                                  start_time_callback=lambda t: setattr(self, '_playback_start_time', t))
 
     def _stop_audio(self) -> None:
         """Stop audio playback and animation."""
@@ -793,6 +858,7 @@ class VoiceFilterGUI:
         self.isAnimating = False
         self._animation_generation += 1
         self.playback_audio = None
+        self._remove_cursor()
         if self.animation_id is not None:
             self.root.after_cancel(self.animation_id)
             self.animation_id = None
@@ -810,11 +876,15 @@ class VoiceFilterGUI:
         if not self.isAnimating or self.playback_audio is None:
             return
 
+        elapsed = time.time() - self._playback_start_time
+        self.playback_position = int(elapsed * self.playback_sample_rate)
+        total_samples = len(self.playback_audio)
+
         window_size = 1024
         start = int(self.playback_position)
-        end = min(start + window_size, len(self.playback_audio))
+        end = min(start + window_size, total_samples)
 
-        if start < len(self.playback_audio):
+        if start < total_samples:
             audio_window = self.playback_audio[start:end]
             rms = np.sqrt(np.mean(audio_window ** 2))
 
@@ -835,10 +905,7 @@ class VoiceFilterGUI:
                 if hasattr(self, 'vu_value_label') and self.vu_value_label.winfo_exists():
                     self.vu_value_label.configure(text=f"{level_db:.1f} dB")
 
-            self.playback_position += self.playback_sample_rate // 30
-
-            if self.playback_position >= len(self.playback_audio):
-                self.playback_position = 0
+            self._update_cursor(start, total_samples)
         else:
             self.playback_position = 0
             for fader in self.faders:
@@ -849,7 +916,7 @@ class VoiceFilterGUI:
                     self.vu_value_label.configure(text="-20.0 dB")
 
         if self.isAnimating:
-            self.animation_id = self.root.after(33, lambda: self._animate_meters(generation))
+            self.animation_id = self.root.after(16, lambda: self._animate_meters(generation))
 
     # Parameters
     def _get_params(self) -> Dict[str, Any]:
