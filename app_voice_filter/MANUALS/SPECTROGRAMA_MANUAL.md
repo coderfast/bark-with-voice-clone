@@ -335,3 +335,23 @@ Toma un archivo de audio y hazte estas preguntas al mirar su espectrograma:
 3. **Hay zonas oscuras?** (frecuencias ausentes o filtradas)
 4. **Cambian los patrones?** (el sonido evoluciona en el tiempo)
 5. **Es uniforme o tiene estructura?** (ruido vs sonido organizado)
+
+---
+
+## Apéndice experto: espectrograma y mini_pitch.py (proyecto Spy Hunter)
+
+Para nuestro conversor, este manual se concreta en cuatro chequeos con el
+`specgram.png` del tema, de 30 segundos cada uno:
+
+1. **Energía útil vs armónicos:** horizontales fuertes por debajo de ~2 kHz
+   (bajo + lead) y peine tenue por encima = música transcribible. Todo
+   uniforme = ruido: no convertir.
+2. **`--xover`:** el valle entre la familia grave y la media. Aquí ~300 Hz.
+3. **`--hi`:** donde terminan las líneas con dibujo y empieza la niebla.
+   El detector de lead capa a 1.200 Hz por esto: lo de arriba son armónicos
+   de cuadrada, no notas (ver PITCH_MANUAL y el `octave_guard` del código).
+4. **Onsets:** cuenta rayas verticales por segundo (~8-10/s = corcheas a
+   ~90-100 BPM). Es la verificación visual del BPM que estima `--auto`.
+
+Si el MIDI final trae notas que aquí no tienen línea horizontal (A8, D9...),
+son artefactos de octava: baja `--hi`, no toques nada más.

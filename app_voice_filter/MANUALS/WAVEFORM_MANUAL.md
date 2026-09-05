@@ -529,4 +529,39 @@ Si son diferentes = el audio tiene **efecto estéreo** (diferente en cada oído)
 
 ---
 
+## Apéndice experto: waveform y mini_pitch.py (proyecto Spy Hunter)
+
+Lo anterior vale para cualquier audio. Para nuestro conversor chiptune→HTML5,
+el waveform aporta tres decisiones concretas:
+
+1. **Tramo de conversión (t0 t1):** busca 15-25 s de envolvente densa y
+   regular, sin valles largos (silencios que el gate cortará) ni mesetas
+   planas a tope (clipping del ripeo: picos cuadrados = armónicos falsos en
+   el MIDI). Confirma el tramo con SELFSIM_MANUAL (dentro de un bloque) y
+   PITCH_VOICED_MANUAL (voicing alto).
+2. **Mono/estéreo y DC:** si un canal está vacío o hay offset (onda no
+   centrada), el pitch falla más en una voz; `load_wav()` promedia a mono,
+   pero un ripeo con un canal muerto baja 6 dB la señal útil. Se ve aquí,
+   no se oye a simple vista.
+3. **Densidad de ataques:** cuenta picos por segundo a ojo (~8-10/s aquí =
+   corcheas a ~90-100 BPM). Si el `--auto` estima un BPM que no cuadra con
+   este conteo visual, desconfía del BPM, no de tus ojos: es el fallo
+   clásico del doble tempo.
+
+---
+
+## Consejos finales
+
+1. **No necesitas ser experto.** Solo con mirar el waveform puedes detectar si hay silencios innecesarios, si el volumen es muy bajo, o si hay partes que suenan diferente.
+
+2. **El waveform es tu aliado visual.** Si algo "se ve raro", probablemente "suena raro". Confía en tus ojos.
+
+3. **Compara antes y después.** Cuando apliques efectos, siempre compara el waveform original con el modificado. Si los picos están recortados (clipping), reduce el volumen.
+
+4. **El espectrograma complementa al waveform.** El waveform te dice "cuánto" (volumen); el espectrograma te dice "qué" (frecuencias/tonos).
+
+5. **Practica.** Abre un archivo de audio, míralo, escúchalo, y trata de conectar lo que ves con lo que oyes. Poco a poco tus ojos aprenderán a "leer" el sonido.
+
+---
+
 *Manual creado para Voice Filter. Para preguntas sobre efectos específicos de audio, consulta la documentación de la aplicación.*
