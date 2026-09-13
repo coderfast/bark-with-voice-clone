@@ -1,0 +1,16 @@
+# normalize_audio.py - Dependencies
+# Install with: pip install -r requirements.txt
+#
+# Compatible with: Windows, Linux, macOS
+
+# Core
+numpy>=1.24.0
+
+# Audio I/O
+soundfile>=0.12.0
+
+# Loudness normalization (LUFS - ITU-R BS.1770)
+pyloudnorm>=0.1.0
+
+# Resampling (optional, used when --sample-rate differs from source)
+scipy>=1.10.0

@@ -4,7 +4,6 @@ import warnings
 import sys
 import importlib.util
 from copy import deepcopy
-import copy
 import json
 import os
 from dataclasses import dataclass
@@ -288,24 +287,6 @@ def get_keys_to_not_convert(model):
 
     return filtered_module_names
 
-#!/usr/bin/env python
-# coding=utf-8
-
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-
 
 if is_torch_available():
     import torch
@@ -480,15 +461,11 @@ class BitsAndBytesConfig:
             return config
 
     def to_json_file(self, json_file_path: Union[str, os.PathLike]):
-        """
-        Save this instance to a JSON file.
+        """Save this instance to a JSON file.
 
         Args:
-            json_file_path (`str` or `os.PathLike`):
+            json_file_path (str or os.PathLike):
                 Path to the JSON file in which this configuration instance's parameters will be saved.
-            use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default
-                `BitsAndBytesConfig()` is serialized to JSON file.
         """
         with open(json_file_path, "w", encoding="utf-8") as writer:
             config_dict = self.to_dict()

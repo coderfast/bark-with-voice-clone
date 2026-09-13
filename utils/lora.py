@@ -1,20 +1,27 @@
 # Adapted from https://github.com/microsoft/DeepSpeedExamples/blob/master/applications/DeepSpeed-Chat/training/utils/module/lora.py
 
 import math
+from typing import Optional
+
 import torch
 from torch import nn
 import torch.nn.functional as F
 
 class LinearLayer_LoRA(nn.Module):
-    # a simple implementation of LoRA
+    """A simple implementation of LoRA (Low-Rank Adaptation).
+
+    This module wraps a linear layer with LoRA adapters for parameter-efficient fine-tuning.
+    """
+
     def __init__(self,
-                 weight,
-                 lora_dim=0,
-                 lora_scaling=1,
-                 lora_dropout=0,
-                 bias=None):
+                 weight: torch.Tensor,
+                 lora_dim: int = 0,
+                 lora_scaling: float = 1,
+                 lora_dropout: float = 0,
+                 bias: Optional[torch.Tensor] = None):
         super(LinearLayer_LoRA, self).__init__()
-        self.weight = weight
+        # Register weight as buffer so it moves with model.to(device)
+        self.register_buffer('weight', weight)
         self.bias = bias
 
         if lora_dim <= 0:
@@ -41,13 +48,12 @@ class LinearLayer_LoRA(nn.Module):
         self.fuse_lora = False
 
     def eval(self):
+        super().eval()
         self.lora_dropout.eval()
 
-    #   self.fuse_lora_weight()
-
     def train(self, mode=True):
+        super().train(mode)
         self.lora_dropout.train(mode)
-        # self.unfuse_lora_weight()
 
     def reset_parameters(self):
         nn.init.kaiming_uniform_(self.lora_right_weight, a=math.sqrt(5))
