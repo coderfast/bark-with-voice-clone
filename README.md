@@ -1,23 +1,26 @@
 # Bark with Voice Clone
 
-A fork of [Suno's BARK](https://github.com/suno-ai/bark) text-to-speech model with added voice cloning capabilities using HuBERT semantic token quantization. Clone voices from short audio samples, generate speech in that cloned voice, fine-tune models on custom datasets, and optionally apply RVC post-processing.
+Forked from [serp-ai/bark-with-voice-clone](https://github.com/serp-ai/bark-with-voice-clone), which is itself a fork of [Suno's BARK](https://github.com/suno-ai/bark) text-to-speech model with added voice cloning capabilities using HuBERT semantic token quantization. Clone voices from short audio samples, generate speech in that cloned voice, fine-tune models on custom datasets, and optionally apply RVC post-processing.
 
 ## Features
 
 - **Voice Cloning**: Clone any voice from 5-12 second audio samples using HuBERT
-- **Text-to-Speech**: Generate natural-sounding speech in multiple languages
-- **CLI Interface**: Generate audio directly from command line
+- **Text-to-Speech**: Generate natural-sounding speech in 13 languages
+- **CLI & GUI Interfaces**: Command-line tool (`bark_cli.py`) and graphical interface (`bark_gui.py`)
+- **Voice Cloning App**: Standalone CLI for voice cloning (`app_clone_voice/`)
+- **Audio Filter App**: GUI with 20+ audio effects (`app_voice_filter/`)
 - **Custom Audio Format**: Output at 11025, 22050, or 44100 Hz with 8 or 16 bits
+- **Audio Visualizations**: 19 types of analysis plots (waveform, spectrogram, MFCC, etc.)
 - **Fine-tuning**: Fine-tune semantic, coarse, and fine models with LoRA and quantization
 - **RVC Integration**: Optional Retrieval-based Voice Conversion post-processing
-- **Multi-language**: Supports English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, and Chinese
+- **Multi-language**: English, German, Spanish, French, Hindi, Italian, Japanese, Korean, Polish, Portuguese, Russian, Turkish, and Chinese
 
 ## Installation
 
 ### Windows
 
 ```cmd
-git clone https://github.com/your-username/bark-with-voice-clone
+git clone https://github.com/coderfast/bark-with-voice-clone
 cd bark-with-voice-clone
 python -m venv venv
 venv\Scripts\activate
@@ -27,17 +30,12 @@ pip install .
 ### Linux / Mac
 
 ```bash
-git clone https://github.com/your-username/bark-with-voice-clone
+git clone https://github.com/coderfast/bark-with-voice-clone
 cd bark-with-voice-clone
 python3 -m venv venv
 source venv/bin/activate
 pip install .
 ```
-
-Eduardo remember the next:
-https://github.com/Tiger14n/RVC-GUI/blob/main/README.md
-https://github.com/Tiger14n/RVC-GUI/releases/tag/Windows-pkg
-and put in a folder named RVC-GUI-pkg
 
 ## Quick Start
 
@@ -53,12 +51,23 @@ python bark_cli.py generate "Hola mundo" -v es_speaker_0 -o hola.wav
 # Generate with custom audio settings
 python bark_cli.py generate "Hello" -v en_speaker_0 -o output.wav --sample-rate 44100 --bits 16 --channels mono
 
+# Generate with full visualizations
+python bark_cli.py generate "Hello" -o output.wav --viz-level full
+
 # List available voices
 python bark_cli.py voices
 
 # Clone a voice
 python bark_cli.py clone --audio reference.wav --name my_voice
 ```
+
+### Using GUI
+
+```bash
+python bark_gui.py
+```
+
+A Tkinter-based graphical interface with voice selection, audio format options, and real-time generation.
 
 ### Using Python API
 
@@ -91,6 +100,71 @@ audio = generate_audio(
 save_audio("output.wav", audio, sample_rate=44100)
 ```
 
+## Standalone Applications
+
+### Voice Cloning App (`app_clone_voice/`)
+
+A standalone CLI application for voice cloning from audio samples. Completely independent of the main project.
+
+```bash
+cd app_clone_voice
+pip install -r requirements.txt
+
+# Clone from source_voice_input/ folder (auto-detect)
+python voice_clone.py --name my_voice
+
+# Clone from specific audio file
+python voice_clone.py --audio reference.wav --name my_voice
+
+# List available voices
+python voice_clone.py --list
+
+# Show voice info
+python voice_clone.py --info en_speaker_0
+```
+
+| Flag | Description |
+|------|-------------|
+| `--audio PATH` | Reference audio file (<13s) |
+| `--name NAME` | Voice name (required) |
+| `--output PATH` | Custom output path for .npz |
+| `--force` | Overwrite existing voice |
+| `--device {auto,cuda,cpu,mps}` | Device selection |
+| `--device-info` | Show available devices |
+| `--verbose` | Detailed output with timing |
+| `--quiet` | Silent mode |
+| `--version` | Show version (1.1.0) |
+| `--list` | List available voices |
+| `--info VOICE` | Show voice metadata |
+
+Features: Cross-platform (Windows/Linux/macOS), auto device detection, Docker support, PyInstaller portable builds. See [app_clone_voice/README.md](app_clone_voice/README.md) for full documentation.
+
+### Audio Filter App (`app_voice_filter/`)
+
+A GUI application for loading and modifying audio files with 20+ effects. Built with Tkinter.
+
+```bash
+cd app_voice_filter
+pip install -r requirements.txt
+python voice_filter.py
+```
+
+**Effects organized in 8 tabs:**
+- **Basic**: Volume, Pitch, Speed
+- **EQ**: 5-band equalizer (100Hz - 6kHz)
+- **Filters**: Low-pass, High-pass
+- **Modulation**: Chorus, Flanger, Phaser, Tremolo, Vibrato
+- **Distortion**: Distortion, Bitcrusher, Overdrive
+- **Time**: Reverb, Delay
+- **Dynamics**: Compression, Noise Gate
+- **Utility**: Fade In/Out, Normalize, Trim, Reverse
+
+**Additional features:** Analog VU meter with needle physics, mixer-style faders with LED meters, waveform and spectrogram visualization, auto-preview on slider release, preset save/load, 19 visualization plots on save.
+
+**Supported formats:** WAV, FLAC, OGG, MP3, AAC, M4A, WMA
+
+**Standalone tool:** `app_voice_filter/NORMALIZE_AUDIO_VOLUME/normalize_audio.py` — LUFS loudness normalizer CLI with presets for mobile (-14 LUFS), games (-16), dialogue (-12), and more.
+
 ## CLI Reference
 
 ### Generate Command
@@ -109,11 +183,13 @@ python bark_cli.py generate "text" [options]
 | `--text-temp` | Text temperature | 0.7 |
 | `--waveform-temp` | Waveform temperature | 0.7 |
 | `--small` | Use small models (faster) | False |
+| `--no-viz` | Skip visualization plots | False |
+| `--viz-level` | basic (4), speech (11), full (19) | basic |
 
 ### Clone Command
 
 ```bash
-python bark_cli.py clone --audio reference.wav --name my_voice
+python bark_cli.py clone --audio reference.wav --name my_voice [--output-dir dir]
 ```
 
 ### Voices Command
@@ -121,6 +197,20 @@ python bark_cli.py clone --audio reference.wav --name my_voice
 ```bash
 python bark_cli.py voices
 ```
+
+## Audio Visualizations
+
+The project includes 19 types of audio analysis visualizations:
+
+| Category | Visualizations |
+|----------|----------------|
+| **Core** | Waveform, Pitch (F0), Spectral Sweep, Spectrogram |
+| **Extended** | Spectral Flatness, Zero Crossing Rate, CQT, Chromagram, Self-Similarity, LPC, Wide/Narrow Band |
+| **Speech** | Mel Spectrogram, MFCC, Formants, Pitch+Voicing, Intensity, Jitter/Shimmer, HNR |
+| **Bark** | EnCodec Codebook, Attention Matrix, Waveform Comparison |
+| **Embedding** | UMAP Projection, Similarity Heatmap |
+
+Use `--viz-level basic` (default), `--viz-level speech`, or `--viz-level full` with the CLI.
 
 ## Jupyter Notebooks
 
@@ -153,12 +243,18 @@ jupyter notebook train_coarse.ipynb
 jupyter notebook train_fine.ipynb
 ```
 
+Features: LoRA adapters, 4-bit/8-bit quantization, distributed training via Accelerate, W&B logging.
+
 ### 3. Output
 
 Fine-tuned models are saved to:
 - `semantic_output/pytorch_model.bin`
 - `coarse_output/pytorch_model.bin`
 - `fine_output/pytorch_model.bin`
+
+Local models in these directories are used automatically during generation.
+
+See [AUDIO_AND_FINETUNING.md](AUDIO_AND_FINETUNING.md) for a detailed guide.
 
 ## RVC Integration
 
@@ -175,6 +271,8 @@ get_vc("path/to/model.pth", "cuda:0", True)
 audio = vc_single(0, "input.wav", f0_up_key=-6, ...)
 ```
 
+See [AUDIO_AND_RVC.md](AUDIO_AND_RVC.md) for a complete guide on when to use RVC vs fine-tuning.
+
 ## Model Architecture
 
 | Model | Parameters | Attention | Output Vocab | Purpose |
@@ -182,6 +280,17 @@ audio = vc_single(0, "input.wav", f0_up_key=-6, ...)
 | GPT (text) | 80M | Causal | 10,000 | Text → Semantic tokens |
 | GPT (coarse) | 80M | Causal | 2×1,024 | Semantic → Coarse codes |
 | FineGPT | 80M | Non-causal | 6×1,024 | Coarse → Fine codes |
+
+### Audio Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `SAMPLE_RATE` | 24,000 Hz | Default output sample rate |
+| `SEMANTIC_RATE_HZ` | 49.9 Hz | One token per ~20ms |
+| `SEMANTIC_VOCAB_SIZE` | 10,000 | Semantic token vocabulary |
+| `CODEBOOK_SIZE` | 1,024 | Audio codebook entries |
+| `N_COARSE_CODEBOOKS` | 2 | Coarse model output |
+| `N_FINE_CODEBOOKS` | 8 | Fine model output |
 
 ## Non-speech Sounds
 
@@ -225,20 +334,78 @@ audio = vc_single(0, "input.wav", f0_up_key=-6, ...)
 
 ```
 bark-with-voice-clone/
-├── bark/                    # Core BARK TTS module
-├── hubert/                  # HuBERT voice cloning module
-├── utils/                   # Utilities (LoRA, training, RVC manager)
-├── bark_cli.py              # Command Line Interface
-├── notebooks/               # Additional notebooks
-├── datasets/                # Training datasets
-├── data/models/hubert/      # HuBERT models
-├── models/                  # Bark model weights
-├── semantic_output/         # Fine-tuned semantic model
-├── coarse_output/           # Fine-tuned coarse model
-├── fine_output/             # Fine-tuned fine model
-├── *.ipynb                  # Jupyter notebooks
-└── rvc_infer.py             # RVC inference
+├── bark/                        # Core BARK TTS module
+│   ├── api.py                   # High-level API with audio format options
+│   ├── generation.py            # Model loading, text/semantic/coarse/fine generation
+│   ├── model.py                 # GPT model architecture
+│   ├── model_fine.py            # FineGPT model architecture
+│   └── assets/prompts/          # 141+ pre-made voice prompts (.npz)
+│
+├── hubert/                      # HuBERT voice cloning module
+│   ├── hubert_manager.py        # Downloads HuBERT models with verification
+│   ├── pre_kmeans_hubert.py     # CustomHubert model
+│   └── customtokenizer.py       # Semantic token quantizer (10K vocab)
+│
+├── utils/                       # Utilities
+│   ├── lora.py                  # LoRA adapter support
+│   ├── bitsandbytes.py          # 4-bit/8-bit quantization
+│   ├── training.py              # Shared training utilities
+│   ├── generation.py            # Shared generation utilities
+│   ├── rvc_manager.py           # RVC auto-download manager
+│   ├── audio_visualizer.py      # 11 core/extended visualizations
+│   ├── speech_analyzer.py       # 7 speech-specific visualizations
+│   ├── bark_analyzer.py         # 3 Bark-specific visualizations
+│   └── embedding_analyzer.py    # 2 speaker embedding visualizations
+│
+├── app_clone_voice/             # Standalone voice cloning CLI (v1.1.0)
+│   ├── voice_clone.py           # Main CLI script
+│   ├── requirements.txt         # Dependencies
+│   ├── Dockerfile               # Docker support
+│   ├── build.py                 # PyInstaller build script
+│   ├── tests/                   # 20 unit tests
+│   ├── bark/                    # Local copy of bark module
+│   └── hubert/                  # Local copy of hubert module
+│
+├── app_voice_filter/            # Audio processing GUI app
+│   ├── voice_filter.py          # Entry point
+│   ├── gui/app.py               # Main GUI class (~1029 lines)
+│   ├── audio/processor.py       # 20+ audio effects
+│   ├── widgets/                 # VU meter, mixer faders
+│   ├── NORMALIZE_AUDIO_VOLUME/  # LUFS loudness normalizer CLI
+│   ├── ffmpeg/                  # FFmpeg binaries for MP3/AAC/M4A/WMA
+│   └── MANUALS/                 # 20 visualization manuals
+│
+├── bark_cli.py                  # Command Line Interface
+├── bark_gui.py                  # Tkinter GUI for TTS generation
+├── rvc_infer.py                 # RVC inference with auto-download
+│
+├── notebooks/                   # Additional notebooks
+│   └── fake_classifier.ipynb    # Audio deepfake detection
+│
+├── *.ipynb                      # Jupyter notebooks (clone, generate, train, test)
+├── datasets/                    # Training datasets
+├── data/models/hubert/          # HuBERT models (downloaded on first run)
+├── models/                      # Bark model weights
+├── semantic_output/             # Fine-tuned semantic model
+├── coarse_output/               # Fine-tuned coarse model
+├── fine_output/                 # Fine-tuned fine model
+├── output/                      # Generated audio output
+│
+├── AUDIO_AND_RVC.md             # RVC integration guide
+├── AUDIO_AND_FINETUNING.md      # Fine-tuning guide
+├── pyproject.toml               # Project configuration
+└── LICENSE.md                   # MIT License
 ```
+
+## Additional Documentation
+
+| File | Description |
+|------|-------------|
+| [QUICKUSAGE.md](QUICKUSAGE.md) | Quick usage guide with CLI examples |
+| [AUDIO_AND_RVC.md](AUDIO_AND_RVC.md) | Complete guide on RVC vs fine-tuning |
+| [AUDIO_AND_FINETUNING.md](AUDIO_AND_FINETUNING.md) | Audio generation pipeline explained |
+| [model-card.md](model-card.md) | Model card with architecture details |
+| [ROADMAP.md](ROADMAP.md) | Development roadmap (all phases complete) |
 
 ## Contributors
 
